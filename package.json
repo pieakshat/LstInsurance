@@ -1,0 +1,5 @@
+{
+	"dependencies": {
+		"@kasarlabs/cairo-coder-mcp": "^0.2.5"
+	}
+}

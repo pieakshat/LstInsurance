@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Environment & secrets
+.env
+.env.*
+touch.env
+
+# Claude / MCP
+.mcp.json
+.claude/
+
+# Starknet / Scarb
+contracts/target/
+contracts/.snfoundry_cache/
+contracts/snfoundry_trace/
+contracts/coverage/
+contracts/profile/
+
+# OS
+.DS_Store
