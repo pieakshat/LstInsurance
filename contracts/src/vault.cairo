@@ -12,6 +12,7 @@
 // - Pausable deposits and withdrawals
 // - Configurable deposit cap
 // - Claims manager can pull funds for verified payouts
+// - LP-initiated liquidity locking for underwriting
 //
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -29,6 +30,18 @@ pub trait ILstVault<TContractState> {
     fn withdraw_for_payout(
         ref self: TContractState, to: starknet::ContractAddress, amount: u256,
     );
+
+    // --- LP Liquidity Locking ---
+    fn lock_liquidity(ref self: TContractState, amount: u256, duration: u64);
+    fn unlock_liquidity(ref self: TContractState, lock_id: u32);
+    fn locked_balance(self: @TContractState, user: starknet::ContractAddress) -> u256;
+    fn total_locked_liquidity(self: @TContractState) -> u256;
+    fn available_liquidity(self: @TContractState) -> u256;
+
+    // --- Solvency Views ---
+    fn solvency_assets(self: @TContractState) -> u256;
+    fn solvency_locked(self: @TContractState) -> u256;
+    fn coverage_capacity(self: @TContractState, leverage: u256) -> u256;
 
     // --- View ---
     fn total_payouts(self: @TContractState) -> u256;
@@ -51,13 +64,22 @@ pub mod LstVault {
     };
     use openzeppelin::upgrades::upgradeable::UpgradeableComponent;
     use openzeppelin::utils::math::Rounding;
-    use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
-    use starknet::{ContractAddress, get_caller_address};
+    use starknet::storage::{
+        Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
+    };
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
 
     // --- Access Control Roles ---
     pub const OWNER_ROLE: felt252 = selector!("OWNER_ROLE");
     pub const PAUSER_ROLE: felt252 = selector!("PAUSER_ROLE");
     pub const CLAIMS_MANAGER_ROLE: felt252 = selector!("CLAIMS_MANAGER_ROLE");
+
+    // --- Lock Storage Node ---
+    #[starknet::storage_node]
+    struct LockNode {
+        amount: u256,
+        unlock_time: u64,
+    }
 
     // --- OpenZeppelin Component Integrations ---
     component!(path: ERC20Component, storage: erc20, event: ERC20Event);
@@ -133,13 +155,40 @@ pub mod LstVault {
         fn withdraw_limit(
             self: @ERC4626Component::ComponentState<ContractState>, owner: ContractAddress,
         ) -> Option<u256> {
-            Option::None
+            let contract_state = self.get_contract();
+            let locked = InternalImpl::_locked_balance_of(contract_state, owner);
+            if locked.is_zero() {
+                Option::None
+            } else {
+                let user_shares = contract_state.erc20.ERC20_balances.entry(owner).read();
+                let user_assets = self._convert_to_assets(user_shares, Rounding::Floor);
+                if user_assets > locked {
+                    Option::Some(user_assets - locked)
+                } else {
+                    Option::Some(0)
+                }
+            }
         }
 
         fn redeem_limit(
             self: @ERC4626Component::ComponentState<ContractState>, owner: ContractAddress,
         ) -> Option<u256> {
-            Option::None
+            let contract_state = self.get_contract();
+            let locked = InternalImpl::_locked_balance_of(contract_state, owner);
+            if locked.is_zero() {
+                Option::None
+            } else {
+                let user_shares = contract_state.erc20.ERC20_balances.entry(owner).read();
+                let user_assets = self._convert_to_assets(user_shares, Rounding::Floor);
+                if user_assets > locked {
+                    let withdrawable_assets = user_assets - locked;
+                    Option::Some(
+                        self._convert_to_shares(withdrawable_assets, Rounding::Floor),
+                    )
+                } else {
+                    Option::Some(0)
+                }
+            }
         }
     }
 
@@ -184,6 +233,9 @@ pub mod LstVault {
         deposit_limit: u256,
         claims_manager: ContractAddress,
         total_payouts: u256,
+        lp_lock_count: Map<ContractAddress, u32>,
+        lp_locks: Map<ContractAddress, Map<u32, LockNode>>,
+        locked_liquidity: u256,
     }
 
     // =========================================================================
@@ -206,6 +258,8 @@ pub mod LstVault {
         #[flat]
         PausableEvent: PausableComponent::Event,
         PayoutWithdrawn: PayoutWithdrawn,
+        LiquidityLocked: LiquidityLocked,
+        LiquidityUnlocked: LiquidityUnlocked,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -213,6 +267,23 @@ pub mod LstVault {
         pub to: ContractAddress,
         pub amount: u256,
         pub total_payouts: u256,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct LiquidityLocked {
+        #[key]
+        pub user: ContractAddress,
+        pub amount: u256,
+        pub unlock_time: u64,
+        pub lock_id: u32,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct LiquidityUnlocked {
+        #[key]
+        pub user: ContractAddress,
+        pub amount: u256,
+        pub lock_id: u32,
     }
 
     // =========================================================================
@@ -342,6 +413,19 @@ pub mod LstVault {
         ) {
             let contract_state = self.get_contract();
             contract_state.pausable.assert_not_paused();
+
+            // Enforce liquidity lock: cannot withdraw locked assets
+            let locked = InternalImpl::_locked_balance_of(contract_state, owner);
+            if locked > 0 {
+                let user_shares = contract_state.erc20.ERC20_balances.entry(owner).read();
+                let user_assets = self._convert_to_assets(user_shares, Rounding::Floor);
+                let withdrawable = if user_assets > locked {
+                    user_assets - locked
+                } else {
+                    0
+                };
+                assert(assets <= withdrawable, 'Liquidity locked');
+            }
         }
 
         fn after_withdraw(
@@ -371,6 +455,44 @@ pub mod LstVault {
 
         fn decimals(self: @ContractState) -> u8 {
             self.decimals.read()
+        }
+    }
+
+    // =========================================================================
+    // Internal Helpers
+    // =========================================================================
+
+    #[generate_trait]
+    impl InternalImpl of InternalTrait {
+        /// Sum of all non-expired, non-zero lock amounts for a user.
+        /// Expired locks (block_timestamp >= unlock_time) are ignored so users
+        /// are never blocked from withdrawing by stale locks.
+        fn _locked_balance_of(self: @ContractState, user: ContractAddress) -> u256 {
+            let lock_count = self.lp_lock_count.entry(user).read();
+            let now = get_block_timestamp();
+            let mut total: u256 = 0;
+            let mut i: u32 = 0;
+            loop {
+                if i >= lock_count {
+                    break;
+                }
+                let lock = self.lp_locks.entry(user).entry(i);
+                let amount = lock.amount.read();
+                if amount > 0 && now < lock.unlock_time.read() {
+                    total += amount;
+                }
+                i += 1;
+            };
+            total
+        }
+
+        /// Get total assets held by the vault (underlying token balance).
+        fn _total_assets(self: @ContractState) -> u256 {
+            let vault_address = starknet::get_contract_address();
+            let asset_dispatcher = ERC20ABIDispatcher {
+                contract_address: self.erc4626.ERC4626_asset.read(),
+            };
+            asset_dispatcher.balance_of(vault_address)
         }
     }
 
@@ -420,20 +542,113 @@ pub mod LstVault {
 
         /// Pull BTC-LST from vault to pay a verified claim.
         /// Only callable by the claims manager contract.
+        /// Payouts reduce locked liquidity backing.
         fn withdraw_for_payout(ref self: ContractState, to: ContractAddress, amount: u256) {
             self.access_control.assert_only_role(CLAIMS_MANAGER_ROLE);
             assert(amount.is_non_zero(), 'Amount cannot be 0');
             assert(to.is_non_zero(), 'Invalid recipient');
 
+            let current_locked = self.locked_liquidity.read();
+            assert(amount <= current_locked, 'Exceeds locked liquidity');
+
             let asset_dispatcher = ERC20ABIDispatcher {
-                contract_address: self.erc4626.asset(),
+                contract_address: self.erc4626.ERC4626_asset.read(),
             };
             assert(asset_dispatcher.transfer(to, amount), 'Payout transfer failed');
+
+            self.locked_liquidity.write(current_locked - amount);
 
             let new_total = self.total_payouts.read() + amount;
             self.total_payouts.write(new_total);
 
             self.emit(PayoutWithdrawn { to, amount, total_payouts: new_total });
+        }
+
+        // --- LP Liquidity Locking ---
+
+        fn lock_liquidity(ref self: ContractState, amount: u256, duration: u64) {
+            let caller = get_caller_address();
+            assert(amount.is_non_zero(), 'Amount must be > 0');
+
+            // Compute caller's unlocked asset value (safe against underflow
+            // when share price drops due to payouts)
+            let shares = self.erc20.ERC20_balances.entry(caller).read();
+            let user_assets = self.erc4626._convert_to_assets(shares, Rounding::Floor);
+            let locked = self._locked_balance_of(caller);
+            assert(user_assets >= locked, 'Assets below locked amount');
+            let unlocked = user_assets - locked;
+            assert(unlocked >= amount, 'Insufficient unlocked assets');
+
+            let unlock_time = get_block_timestamp() + duration;
+            let lock_id = self.lp_lock_count.entry(caller).read();
+
+            let lock = self.lp_locks.entry(caller).entry(lock_id);
+            lock.amount.write(amount);
+            lock.unlock_time.write(unlock_time);
+
+            self.lp_lock_count.entry(caller).write(lock_id + 1);
+            self.locked_liquidity.write(self.locked_liquidity.read() + amount);
+
+            self.emit(LiquidityLocked { user: caller, amount, unlock_time, lock_id });
+        }
+
+        fn unlock_liquidity(ref self: ContractState, lock_id: u32) {
+            let caller = get_caller_address();
+            let lock_count = self.lp_lock_count.entry(caller).read();
+            assert(lock_id < lock_count, 'Invalid lock id');
+
+            let lock = self.lp_locks.entry(caller).entry(lock_id);
+            let amount = lock.amount.read();
+            let unlock_time = lock.unlock_time.read();
+
+            assert(amount.is_non_zero(), 'Lock already unlocked');
+            assert(get_block_timestamp() >= unlock_time, 'Lock not expired');
+
+            // Clear the lock
+            lock.amount.write(0);
+            lock.unlock_time.write(0);
+
+            // Reduce global locked liquidity (saturate to 0 if payouts reduced it)
+            let current_locked = self.locked_liquidity.read();
+            if amount <= current_locked {
+                self.locked_liquidity.write(current_locked - amount);
+            } else {
+                self.locked_liquidity.write(0);
+            }
+
+            self.emit(LiquidityUnlocked { user: caller, amount, lock_id });
+        }
+
+        fn locked_balance(self: @ContractState, user: ContractAddress) -> u256 {
+            self._locked_balance_of(user)
+        }
+
+        fn total_locked_liquidity(self: @ContractState) -> u256 {
+            self.locked_liquidity.read()
+        }
+
+        fn available_liquidity(self: @ContractState) -> u256 {
+            let total = self._total_assets();
+            let locked = self.locked_liquidity.read();
+            if total > locked {
+                total - locked
+            } else {
+                0
+            }
+        }
+
+        // --- Solvency Views ---
+
+        fn solvency_assets(self: @ContractState) -> u256 {
+            self._total_assets()
+        }
+
+        fn solvency_locked(self: @ContractState) -> u256 {
+            self.locked_liquidity.read()
+        }
+
+        fn coverage_capacity(self: @ContractState, leverage: u256) -> u256 {
+            self.locked_liquidity.read() * leverage
         }
 
         // --- View ---

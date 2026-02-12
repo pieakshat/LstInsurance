@@ -1,23 +1,25 @@
+📄 PRD — BTC-LST Insurance Infrastructure
 
 ⸻
-PRD — BTC-LST Insurance Infrastructure
 
 1. Overview
 
 Build a DeFi insurance infrastructure on Starknet where:
-	•	Liquidity providers deposit BTC-LST into an ERC-4626 vault.
-	•	Partner protocols integrate insurance coverage for their users.
-	•	Users pay one-time premiums for coverage.
-	•	Premiums flow to LPs as yield.
-	•	In the event of a hack, insured users can claim payouts from the vault based on verified losses.
+	•	Liquidity providers deposit BTC-LST into protocol-specific ERC-4626 vaults.
+	•	Each vault underwrites risk for a single partner protocol.
+	•	LP liquidity is time-locked to back active coverage.
+	•	Users pay one-time premiums for insurance.
+	•	Premiums flow only to LPs underwriting that protocol.
+	•	In the event of a hack, insured users claim payouts via Merkle proofs from the relevant vault.
 
 ⸻
 
 2. Goals
 	•	Yield-backed underwriting using BTC-LST.
-	•	B2B2C insurance distribution via protocol integrations.
-	•	Tokenized coverage positions.
-	•	Scalable claims distribution via Merkle snapshots.
+	•	Protocol-isolated solvency pools.
+	•	LP-selected risk exposure.
+	•	Tokenized insurance coverage.
+	•	Scalable claims via Merkle snapshots.
 	•	Fully on-chain solvency + payout accounting.
 
 ⸻
@@ -26,160 +28,222 @@ Build a DeFi insurance infrastructure on Starknet where:
 
 Liquidity Providers (LPs)
 
-Deposit BTC-LST → earn:
-	•	Native LST yield
-	•	Insurance premiums
+Deposit BTC-LST into protocol vaults.
+
+Earn:
+	•	Native BTC-LST yield
+	•	Protocol insurance premiums
+
+Must lock liquidity for underwriting.
+
+⸻
 
 Protocol Partners
 
 Integrate insurance infra for their users.
 
+Define:
+	•	Coverage parameters
+	•	Premium pricing
+	•	Coverage conditions
+
+⸻
+
 Insured Users
 
-Buy coverage on protocol deposits.
+Purchase coverage on protocol positions.
+
+Receive coverage tokens representing claim rights.
+
+⸻
 
 Mediator / Resolver
 
-Confirms hacks and approves claims.
+Approves incidents and submits loss snapshots.
 
 ⸻
 
-4. System Components
+4. System Architecture
 
-4.1 BTC-LST Vault (ERC-4626)
+⸻
 
-Role: Solvency pool.
+4.1 Vault Factory
 
-Functions:
+Deploys protocol-specific solvency vaults.
+
+Functions
+	•	createVault(protocol_id, asset)
+	•	getVault(protocol_id)
+	•	isValidVault(address)
+
+Notes
+	•	One vault per protocol.
+	•	Prevents risk cross-contamination.
+
+⸻
+
+4.2 Protocol Insurance Vault (ERC-4626)
+
+Solvency pool backing a single protocol.
+
+Functions
 	•	deposit()
 	•	withdraw()
+	•	lockLiquidity(amount, duration)
+	•	unlockLiquidity()
+	•	withdraw_for_payout()
 	•	totalAssets()
-	•	convertToShares()
 
-Notes:
-	•	Vault holds BTC-LST only.
+Notes
+	•	Holds BTC-LST only.
 	•	Yield accrues via LST appreciation.
-	•	Funds used for payouts.
+	•	Liquidity locked while underwriting.
+	•	Only locked liquidity backs coverage.
 
 ⸻
 
-4.2 Premium Vault
+4.3 LP Liquidity Locking
 
-Role: Premium treasury + LP reward distributor.
+LPs must lock liquidity to underwrite risk.
 
-Functions:
-	•	Receive premium payments.
-	•	Track premium accrual.
-	•	Distribute rewards to LPs pro-rata.
+Lock Parameters
+	•	Amount
+	•	Lock duration
+	•	Protocol vault
 
-Optional: ERC-4626 wrapper.
+Rules
+	•	Locked funds cannot be withdrawn.
+	•	Premium rewards accrue only while locked.
+	•	Unlock → premium entitlement stops.
 
 ⸻
 
-4.3 Coverage Token
+4.4 Premium Vault (Per Protocol)
+
+Treasury holding premiums for each protocol.
+
+Functions
+	•	Receive premium payments
+	•	Track accrual
+	•	Distribute rewards to locked LPs
+
+Optional: Can be merged into vault accounting.
+
+⸻
+
+4.5 Coverage Token
 
 Represents insurance entitlement.
 
-Standard: ERC-721 or ERC-1155 preferred.
+Standard
 
-Metadata fields:
+ERC-721 or ERC-1155.
+
+Metadata
 	•	protocol_id
 	•	coverage_amount
-	•	coverage_start
-	•	coverage_end
+	•	start_time
+	•	end_time
 	•	premium_paid
 	•	risk_type
 
-Minted when premium is paid.
+Minted on premium purchase.
+
+Burned on expiry or full claim.
 
 ⸻
 
-4.4 Protocol Registry
+4.6 Protocol Registry
 
-Onboards partner protocols.
+Manages partner onboarding.
 
-Functions:
+Functions
 	•	registerProtocol()
 	•	setCoverageParams()
 	•	pauseProtocol()
 
-Stored params:
-	•	Coverage cap %
-	•	Premium rate
+Stored Parameters
+	•	Coverage caps
+	•	Premium rates
 	•	Covered risks
 	•	Claim conditions
 
 ⸻
 
-4.5 Premium Purchase Module
+4.7 Premium Purchase Module
 
-Handles user coverage purchases.
+Handles coverage sales.
 
-Flow:
+Flow
 	1.	User selects protocol.
-	2.	Chooses coverage amount.
+	2.	Chooses coverage amount + duration.
 	3.	Pays premium.
 	4.	Coverage token minted.
-	5.	Premium routed to Premium Vault.
+	5.	Premium routed to protocol premium vault.
+	6.	Liquidity locked in solvency vault.
 
 ⸻
 
-4.6 Resolution Module
+4.8 Resolution Module
 
-Confirms incidents.
+Confirms insurance incidents.
 
-Trigger sources:
+Triggers
 	•	Multisig
 	•	Oracle
-	•	Governance
+	•	Governance vote
 
-Functions:
+Functions
 	•	reportIncident(protocol_id)
 	•	approveIncident()
 	•	rejectIncident()
 
-Outputs incident ID.
+Outputs incident_id.
 
 ⸻
 
-4.7 Loss Snapshot Engine
+4.9 Loss Snapshot Engine (Off-Chain)
 
-Off-chain computation layer.
+Computes claimable losses.
 
-Responsibilities:
+Responsibilities
 	•	Compute user losses.
 	•	Validate coverage.
-	•	Calculate claimable amounts.
+	•	Apply coverage caps.
+	•	Adjust for insolvency if needed.
 
-Output:
+Outputs
 	•	Merkle root
-	•	Proofs per user
+	•	Claim proofs
 
 ⸻
 
-4.8 Claim Manager
+4.10 Claim Manager (Pull-Based)
 
-Handles claims using Merkle proofs.
+Verifies claims via Merkle proofs.
 
-Storage:
+Storage
 	•	incident_id → merkle_root
 	•	Claimed bitmap
 
-Functions:
+Functions
 	•	submitMerkleRoot()
 	•	claim(amount, proof)
 	•	isClaimed()
 
+Users claim individually.
+
 ⸻
 
-4.9 Payout Manager
+4.11 Payout Manager
 
-Executes liquidity withdrawals.
+Executes liquidity payouts.
 
-Flow:
-	1.	Validate claim via Claim Manager.
-	2.	Pull liquidity from BTC-LST Vault.
-	3.	Transfer payout to user.
+Flow
+	1.	Claim verified.
+	2.	Identify protocol vault.
+	3.	Withdraw liquidity.
+	4.	Transfer to user.
 
 ⸻
 
@@ -187,43 +251,65 @@ Flow:
 
 ⸻
 
-5.1 LP Deposit Flow
-	1.	LP deposits BTC-LST.
-	2.	ERC-4626 shares minted.
-	3.	Vault TVL increases.
+5.1 Vault Deployment Flow
+	1.	Protocol approved.
+	2.	Factory deploys vault.
+	3.	Vault configured.
+	4.	LP deposits open.
 
 ⸻
 
-5.2 Coverage Purchase Flow
+5.2 LP Deposit & Lock Flow
+	1.	LP deposits BTC-LST.
+	2.	Shares minted.
+	3.	LP locks liquidity.
+	4.	Lock backs active coverage.
+
+⸻
+
+5.3 Coverage Purchase Flow
 	1.	User deposits in partner protocol.
-	2.	Buys insurance via integration.
+	2.	Buys insurance.
 	3.	Pays premium.
 	4.	Coverage token minted.
-	5.	Premium → Premium Vault.
+	5.	Premium routed.
+	6.	Liquidity locked.
 
 ⸻
 
-5.3 Premium Distribution Flow
-	1.	Premiums accumulate.
-	2.	LP rewards calculated:
+5.4 Premium Distribution Flow
 
-reward = premium_pool * (lp_shares / total_shares)
+Premiums distributed per vault:
 
-	3.	LPs claim rewards.
+reward =
+  protocol_premiums
+* (lp_locked / total_locked)
+
+Unlocked liquidity earns nothing.
 
 ⸻
 
-5.4 Incident & Claims Flow
+5.5 Incident & Claims Flow
 	1.	Hack occurs.
-	2.	Resolution Module approves incident.
-	3.	Loss Snapshot Engine computes losses.
-	4.	Merkle root submitted onchain.
-	5.	Users claim with proofs.
-	6.	Payout Manager withdraws from vault.
+	2.	Resolution Module approves.
+	3.	Loss snapshot computed.
+	4.	Merkle root submitted.
+	5.	Users claim individually.
+	6.	Vault pays payouts.
 
 ⸻
 
 6. Data Structures
+
+⸻
+
+LP Lock
+
+struct Lock {
+  amount
+  unlock_time
+}
+
 
 ⸻
 
@@ -253,11 +339,31 @@ struct Incident {
 ⸻
 
 7. Risk Controls
-	•	Coverage caps per protocol.
-	•	Global solvency ratio enforcement.
+	•	Coverage caps per vault.
+	•	Liquidity lock enforcement.
 	•	Coverage expiry enforcement.
 	•	Double-claim prevention.
+	•	Vault deposit caps.
 	•	Incident pause controls.
+	•	Insolvency ratio adjustments.
 
 ⸻
+
+8. Economic Model
+
+⸻
+
+LP Yield Sources
+	•	BTC-LST native yield.
+	•	Insurance premiums.
+
+Only while liquidity locked.
+
+⸻
+
+Loss Socialization
+
+Losses affect only LPs in that protocol vault.
+
+Share price decreases after payouts.
 
