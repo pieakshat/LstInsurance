@@ -17,5 +17,9 @@ contracts/snfoundry_trace/
 contracts/coverage/
 contracts/profile/
 
+# Docs (except README)
+*.md
+!README.md
+
 # OS
 .DS_Store
