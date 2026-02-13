@@ -18,32 +18,27 @@
 
 #[starknet::interface]
 pub trait ILstVault<TContractState> {
-    // --- Admin ---
     fn pause(ref self: TContractState);
     fn unpause(ref self: TContractState);
     fn set_deposit_limit(ref self: TContractState, limit: u256);
     fn get_deposit_limit(self: @TContractState) -> u256;
 
-    // --- Claims Manager ---
     fn set_claims_manager(ref self: TContractState, claims_manager: starknet::ContractAddress);
     fn get_claims_manager(self: @TContractState) -> starknet::ContractAddress;
     fn withdraw_for_payout(
         ref self: TContractState, to: starknet::ContractAddress, amount: u256,
     );
 
-    // --- LP Liquidity Locking ---
     fn lock_liquidity(ref self: TContractState, amount: u256, duration: u64);
     fn unlock_liquidity(ref self: TContractState, lock_id: u32);
     fn locked_balance(self: @TContractState, user: starknet::ContractAddress) -> u256;
     fn total_locked_liquidity(self: @TContractState) -> u256;
     fn available_liquidity(self: @TContractState) -> u256;
 
-    // --- Solvency Views ---
     fn solvency_assets(self: @TContractState) -> u256;
     fn solvency_locked(self: @TContractState) -> u256;
     fn coverage_capacity(self: @TContractState, leverage: u256) -> u256;
 
-    // --- View ---
     fn total_payouts(self: @TContractState) -> u256;
 }
 
@@ -69,19 +64,16 @@ pub mod LstVault {
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
 
-    // --- Access Control Roles ---
     pub const OWNER_ROLE: felt252 = selector!("OWNER_ROLE");
     pub const PAUSER_ROLE: felt252 = selector!("PAUSER_ROLE");
     pub const CLAIMS_MANAGER_ROLE: felt252 = selector!("CLAIMS_MANAGER_ROLE");
 
-    // --- Lock Storage Node ---
     #[starknet::storage_node]
     struct LockNode {
         amount: u256,
         unlock_time: u64,
     }
 
-    // --- OpenZeppelin Component Integrations ---
     component!(path: ERC20Component, storage: erc20, event: ERC20Event);
     component!(path: ERC4626Component, storage: erc4626, event: ERC4626Event);
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
@@ -89,12 +81,10 @@ pub mod LstVault {
     component!(path: UpgradeableComponent, storage: upgradeable, event: UpgradeableEvent);
     component!(path: PausableComponent, storage: pausable, event: PausableEvent);
 
-    // --- ERC4626 Implementation ---
     #[abi(embed_v0)]
     impl ERC4626Impl = ERC4626Component::ERC4626Impl<ContractState>;
     impl ERC4626InternalImpl = ERC4626Component::InternalImpl<ContractState>;
 
-    // No fees on deposit/mint/withdraw/redeem
     impl ERC4626FeesImpl of ERC4626Component::FeeConfigTrait<ContractState> {
         fn calculate_deposit_fee(
             self: @ERC4626Component::ComponentState<ContractState>, assets: u256, shares: u256,
@@ -121,7 +111,6 @@ pub mod LstVault {
         }
     }
 
-    // --- Deposit/Withdraw Limits ---
     impl ERC4626LimitConfigImpl of ERC4626Component::LimitConfigTrait<ContractState> {
         fn deposit_limit(
             self: @ERC4626Component::ComponentState<ContractState>, receiver: ContractAddress,
@@ -192,28 +181,21 @@ pub mod LstVault {
         }
     }
 
-    // --- ERC20 Implementation ---
     #[abi(embed_v0)]
     impl ERC20Impl = ERC20Component::ERC20Impl<ContractState>;
     impl ERC20InternalImpl = ERC20Component::InternalImpl<ContractState>;
     #[abi(embed_v0)]
     impl ERC20CamelOnlyImpl = ERC20Component::ERC20CamelOnlyImpl<ContractState>;
 
-    // --- Access Control Implementation ---
     #[abi(embed_v0)]
     impl AccessControlImpl =
         AccessControlComponent::AccessControlImpl<ContractState>;
     impl AccessControlInternalImpl = AccessControlComponent::InternalImpl<ContractState>;
     impl UpgradeableInternalImpl = UpgradeableComponent::InternalImpl<ContractState>;
 
-    // --- Pausable Implementation ---
     #[abi(embed_v0)]
     impl PausableImpl = PausableComponent::PausableImpl<ContractState>;
     impl PausableInternalImpl = PausableComponent::InternalImpl<ContractState>;
-
-    // =========================================================================
-    // Storage
-    // =========================================================================
 
     #[storage]
     pub struct Storage {
@@ -237,10 +219,6 @@ pub mod LstVault {
         lp_locks: Map<ContractAddress, Map<u32, LockNode>>,
         locked_liquidity: u256,
     }
-
-    // =========================================================================
-    // Events
-    // =========================================================================
 
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -286,10 +264,6 @@ pub mod LstVault {
         pub lock_id: u32,
     }
 
-    // =========================================================================
-    // Constructor
-    // =========================================================================
-
     #[constructor]
     fn constructor(
         ref self: ContractState,
@@ -298,30 +272,20 @@ pub mod LstVault {
         underlying_asset: ContractAddress,
         owner: ContractAddress,
     ) {
-        // Init components
         self.erc20.initializer(name, symbol);
         self.erc4626.initializer(underlying_asset);
         self.access_control.initializer();
 
-        // Role hierarchy
         self.access_control.set_role_admin(OWNER_ROLE, OWNER_ROLE);
         self.access_control.set_role_admin(PAUSER_ROLE, OWNER_ROLE);
         self.access_control.set_role_admin(CLAIMS_MANAGER_ROLE, OWNER_ROLE);
 
-        // Grant owner all roles
         self.access_control._grant_role(OWNER_ROLE, owner);
         self.access_control._grant_role(PAUSER_ROLE, owner);
 
-        // Match underlying asset decimals
         self.decimals.write(ERC20ABIDispatcher { contract_address: underlying_asset }.decimals());
-
-        // Unlimited deposits by default
         self.deposit_limit.write(Bounded::MAX);
     }
-
-    // =========================================================================
-    // Upgradeable
-    // =========================================================================
 
     #[abi(embed_v0)]
     impl UpgradeableImpl of IUpgradeable<ContractState> {
@@ -331,12 +295,8 @@ pub mod LstVault {
         }
     }
 
-    // =========================================================================
-    // ERC4626 Asset Management
-    // =========================================================================
-
-    /// Total assets = underlying token balance held by this vault contract.
-    /// When payouts happen, balance decreases → share price drops → LPs absorb the loss.
+    /// total_assets = vault's underlying token balance.
+    /// Payouts decrease balance → share price drops → LPs absorb the loss.
     impl VaultAssetsManagementImpl of ERC4626Component::AssetsManagementTrait<ContractState> {
         fn get_total_assets(self: @ERC4626Component::ComponentState<ContractState>) -> u256 {
             let vault_address = starknet::get_contract_address();
@@ -376,10 +336,6 @@ pub mod LstVault {
         }
     }
 
-    // =========================================================================
-    // ERC4626 Hooks
-    // =========================================================================
-
     pub impl VaultHooksImpl of ERC4626Component::ERC4626HooksTrait<ContractState> {
         fn before_deposit(
             ref self: ERC4626Component::ComponentState<ContractState>,
@@ -414,7 +370,6 @@ pub mod LstVault {
             let contract_state = self.get_contract();
             contract_state.pausable.assert_not_paused();
 
-            // Enforce liquidity lock: cannot withdraw locked assets
             let locked = InternalImpl::_locked_balance_of(contract_state, owner);
             if locked > 0 {
                 let user_shares = contract_state.erc20.ERC20_balances.entry(owner).read();
@@ -439,10 +394,6 @@ pub mod LstVault {
         ) {}
     }
 
-    // =========================================================================
-    // Token Metadata
-    // =========================================================================
-
     #[abi(embed_v0)]
     pub impl VaultMetadataImpl of IERC20Metadata<ContractState> {
         fn name(self: @ContractState) -> ByteArray {
@@ -458,15 +409,10 @@ pub mod LstVault {
         }
     }
 
-    // =========================================================================
-    // Internal Helpers
-    // =========================================================================
-
     #[generate_trait]
     impl InternalImpl of InternalTrait {
-        /// Sum of all non-expired, non-zero lock amounts for a user.
-        /// Expired locks (block_timestamp >= unlock_time) are ignored so users
-        /// are never blocked from withdrawing by stale locks.
+        /// Sums only non-expired, non-zero locks. Expired locks are ignored
+        /// so users are never blocked from withdrawing by stale locks.
         fn _locked_balance_of(self: @ContractState, user: ContractAddress) -> u256 {
             let lock_count = self.lp_lock_count.entry(user).read();
             let now = get_block_timestamp();
@@ -486,7 +432,6 @@ pub mod LstVault {
             total
         }
 
-        /// Get total assets held by the vault (underlying token balance).
         fn _total_assets(self: @ContractState) -> u256 {
             let vault_address = starknet::get_contract_address();
             let asset_dispatcher = ERC20ABIDispatcher {
@@ -496,14 +441,8 @@ pub mod LstVault {
         }
     }
 
-    // =========================================================================
-    // Vault Implementation
-    // =========================================================================
-
     #[abi(embed_v0)]
     pub impl LstVaultImpl of super::ILstVault<ContractState> {
-        // --- Admin ---
-
         fn pause(ref self: ContractState) {
             self.access_control.assert_only_role(PAUSER_ROLE);
             self.pausable.pause();
@@ -523,11 +462,8 @@ pub mod LstVault {
             self.deposit_limit.read()
         }
 
-        // --- Claims Manager ---
-
         fn set_claims_manager(ref self: ContractState, claims_manager: ContractAddress) {
             self.access_control.assert_only_role(OWNER_ROLE);
-            // Revoke old role if set
             let old = self.claims_manager.read();
             if old.is_non_zero() {
                 self.access_control._revoke_role(CLAIMS_MANAGER_ROLE, old);
@@ -540,9 +476,7 @@ pub mod LstVault {
             self.claims_manager.read()
         }
 
-        /// Pull BTC-LST from vault to pay a verified claim.
-        /// Only callable by the claims manager contract.
-        /// Payouts reduce locked liquidity backing.
+        /// Pulls BTC-LST from vault for a verified claim. Reduces locked liquidity.
         fn withdraw_for_payout(ref self: ContractState, to: ContractAddress, amount: u256) {
             self.access_control.assert_only_role(CLAIMS_MANAGER_ROLE);
             assert(amount.is_non_zero(), 'Amount cannot be 0');
@@ -564,14 +498,10 @@ pub mod LstVault {
             self.emit(PayoutWithdrawn { to, amount, total_payouts: new_total });
         }
 
-        // --- LP Liquidity Locking ---
-
         fn lock_liquidity(ref self: ContractState, amount: u256, duration: u64) {
             let caller = get_caller_address();
             assert(amount.is_non_zero(), 'Amount must be > 0');
 
-            // Compute caller's unlocked asset value (safe against underflow
-            // when share price drops due to payouts)
             let shares = self.erc20.ERC20_balances.entry(caller).read();
             let user_assets = self.erc4626._convert_to_assets(shares, Rounding::Floor);
             let locked = self._locked_balance_of(caller);
@@ -599,16 +529,13 @@ pub mod LstVault {
 
             let lock = self.lp_locks.entry(caller).entry(lock_id);
             let amount = lock.amount.read();
-            let unlock_time = lock.unlock_time.read();
 
             assert(amount.is_non_zero(), 'Lock already unlocked');
-            assert(get_block_timestamp() >= unlock_time, 'Lock not expired');
+            assert(get_block_timestamp() >= lock.unlock_time.read(), 'Lock not expired');
 
-            // Clear the lock
             lock.amount.write(0);
             lock.unlock_time.write(0);
 
-            // Reduce global locked liquidity (saturate to 0 if payouts reduced it)
             let current_locked = self.locked_liquidity.read();
             if amount <= current_locked {
                 self.locked_liquidity.write(current_locked - amount);
@@ -637,8 +564,6 @@ pub mod LstVault {
             }
         }
 
-        // --- Solvency Views ---
-
         fn solvency_assets(self: @ContractState) -> u256 {
             self._total_assets()
         }
@@ -650,8 +575,6 @@ pub mod LstVault {
         fn coverage_capacity(self: @ContractState, leverage: u256) -> u256 {
             self.locked_liquidity.read() * leverage
         }
-
-        // --- View ---
 
         fn total_payouts(self: @ContractState) -> u256 {
             self.total_payouts.read()
