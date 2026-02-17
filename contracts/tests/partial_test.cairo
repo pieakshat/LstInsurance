@@ -23,6 +23,7 @@ use contracts::coverage_token::{
 use contracts::protocol_registry::{
     IProtocolRegistryDispatcher, IProtocolRegistryDispatcherTrait,
 };
+use contracts::vault::{ILstVaultDispatcher, ILstVaultDispatcherTrait};
 
 #[starknet::interface]
 trait ITestERC4626<TContractState> {
@@ -204,8 +205,23 @@ fn test_full_insurance_flow() {
     assert(vault_shares.balance_of(LP2()) == lp2_shares, 'LP2 share bal');
 
     // ─────────────────────────────────────────────
-    // Phase 3: LPs checkpoint their vault shares
-    //          (records their share for premium distribution)
+    // Phase 2b: LPs lock liquidity for underwriting
+    //           (required to earn premiums & back coverage)
+    // ─────────────────────────────────────────────
+
+    let vault_lock = ILstVaultDispatcher { contract_address: vault_addr };
+
+    start_cheat_caller_address(vault_addr, LP1());
+    vault_lock.lock_liquidity(lp1_deposit, NINETY_DAYS);
+    stop_cheat_caller_address(vault_addr);
+
+    start_cheat_caller_address(vault_addr, LP2());
+    vault_lock.lock_liquidity(lp2_deposit, NINETY_DAYS);
+    stop_cheat_caller_address(vault_addr);
+
+    // ─────────────────────────────────────────────
+    // Phase 3: LPs checkpoint their locked liquidity
+    //          (records their locked amount for premium distribution)
     // ─────────────────────────────────────────────
 
     start_cheat_caller_address(pm_addr, LP1());
@@ -221,15 +237,15 @@ fn test_full_insurance_flow() {
     //          for depositing into XYZ Protocol
     // ─────────────────────────────────────────────
 
-    let coverage_amount: u256 = 1_000_000_000_000_000_000_000; // 1,000 LST worth of coverage
+    let coverage_amount: u256 = 800_000_000_000_000_000_000; // 800 LST worth of coverage
     let duration: u64 = NINETY_DAYS;
 
     // Preview the USDC cost first
     // Formula: coverage * rate * duration / (RATE_DENOM * BASE_DURATION)
-    //        = 1000e18 * 500 * 90d / (10000 * 90d) = 1000e18 * 0.05 = 50e18 USDC
+    //        = 800e18 * 500 * 90d / (10000 * 90d) = 800e18 * 0.05 = 40e18 USDC
     let premium_cost = pm.preview_cost(coverage_amount, duration);
-    let expected_cost: u256 = 50_000_000_000_000_000_000; // 50 USDC
-    assert(premium_cost == expected_cost, 'Premium should be 50 USDC');
+    let expected_cost: u256 = 40_000_000_000_000_000_000; // 40 USDC
+    assert(premium_cost == expected_cost, 'Premium should be 40 USDC');
 
     // Fund buyer with USDC and approve premium module
     fund_and_approve(usdc, COVERAGE_BUYER(), pm_addr, premium_cost);
@@ -244,19 +260,19 @@ fn test_full_insurance_flow() {
 
     let position: CoveragePosition = cov_token.get_coverage(token_id);
     assert(position.protocol_id == 1, 'Covers XYZ protocol (id=1)');
-    assert(position.coverage_amount == coverage_amount, 'Coverage = 1000 LST');
-    assert(position.premium_paid == premium_cost, 'Paid 50 USDC');
+    assert(position.coverage_amount == coverage_amount, 'Coverage = 800 LST');
+    assert(position.premium_paid == premium_cost, 'Paid 40 USDC');
     assert(position.start_time == BASE_TIME, 'Starts now');
     assert(position.end_time == BASE_TIME + NINETY_DAYS, 'Ends in 90 days');
 
     // ── Verify: USDC moved from buyer to premium module ──
     assert(usdc_token.balance_of(COVERAGE_BUYER()) == 0, 'Buyer spent all USDC');
-    assert(usdc_token.balance_of(pm_addr) == premium_cost, 'PM holds 50 USDC');
+    assert(usdc_token.balance_of(pm_addr) == premium_cost, 'PM holds 40 USDC');
 
     // ── Verify: Premium module state updated ──
     assert(pm.is_subscribed(COVERAGE_BUYER()), 'Buyer is subscribed');
-    assert(pm.total_active_coverage() == coverage_amount, '1000 LST active coverage');
-    assert(pm.pending_premiums() == premium_cost, '50 USDC pending');
+    assert(pm.total_active_coverage() == coverage_amount, '800 LST active coverage');
+    assert(pm.pending_premiums() == premium_cost, '40 USDC pending');
 
     // ─────────────────────────────────────────────
     // Phase 5: Governance advances epoch
@@ -268,7 +284,7 @@ fn test_full_insurance_flow() {
     stop_cheat_caller_address(pm_addr);
 
     assert(pm.current_epoch() == 2, 'Now epoch 2');
-    assert(pm.epoch_premiums(1) == premium_cost, 'Epoch 1 = 50 USDC');
+    assert(pm.epoch_premiums(1) == premium_cost, 'Epoch 1 = 40 USDC');
     assert(pm.pending_premiums() == 0, 'Pending reset to 0');
 
     // ─────────────────────────────────────────────
@@ -281,7 +297,7 @@ fn test_full_insurance_flow() {
 
     assert(lp1_claimable > 0, 'LP1 earned premiums');
     assert(lp2_claimable > 0, 'LP2 earned premiums');
-    // LP1 deposited 500 LST vs LP2's 300 LST → LP1 gets larger share
+    // LP1 locked 500 LST vs LP2's 300 LST → LP1 gets larger share
     assert(lp1_claimable > lp2_claimable, 'LP1 gets more (500 > 300)');
 
     // LP1 claims

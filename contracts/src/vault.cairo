@@ -218,6 +218,7 @@ pub mod LstVault {
         lp_lock_count: Map<ContractAddress, u32>,
         lp_locks: Map<ContractAddress, Map<u32, LockNode>>,
         locked_liquidity: u256,
+        total_raw_locked: u256,
     }
 
     #[event]
@@ -411,12 +412,13 @@ pub mod LstVault {
 
     #[generate_trait]
     impl InternalImpl of InternalTrait {
-        /// Sums only non-expired, non-zero locks. Expired locks are ignored
-        /// so users are never blocked from withdrawing by stale locks.
+        /// Returns the effective (diluted) locked balance for a user.
+        /// After a payout, locked_liquidity decreases but total_raw_locked stays
+        /// the same, so each LP's effective lock shrinks proportionally.
         fn _locked_balance_of(self: @ContractState, user: ContractAddress) -> u256 {
             let lock_count = self.lp_lock_count.entry(user).read();
             let now = get_block_timestamp();
-            let mut total: u256 = 0;
+            let mut raw_total: u256 = 0;
             let mut i: u32 = 0;
             loop {
                 if i >= lock_count {
@@ -425,11 +427,18 @@ pub mod LstVault {
                 let lock = self.lp_locks.entry(user).entry(i);
                 let amount = lock.amount.read();
                 if amount > 0 && now < lock.unlock_time.read() {
-                    total += amount;
+                    raw_total += amount;
                 }
                 i += 1;
             };
-            total
+
+            let total_raw = self.total_raw_locked.read();
+            if total_raw.is_zero() || raw_total.is_zero() {
+                return 0;
+            }
+
+            let locked = self.locked_liquidity.read();
+            raw_total * locked / total_raw
         }
 
         fn _total_assets(self: @ContractState) -> u256 {
@@ -518,6 +527,7 @@ pub mod LstVault {
 
             self.lp_lock_count.entry(caller).write(lock_id + 1);
             self.locked_liquidity.write(self.locked_liquidity.read() + amount);
+            self.total_raw_locked.write(self.total_raw_locked.read() + amount);
 
             self.emit(LiquidityLocked { user: caller, amount, unlock_time, lock_id });
         }
@@ -528,22 +538,37 @@ pub mod LstVault {
             assert(lock_id < lock_count, 'Invalid lock id');
 
             let lock = self.lp_locks.entry(caller).entry(lock_id);
-            let amount = lock.amount.read();
+            let raw_amount = lock.amount.read();
 
-            assert(amount.is_non_zero(), 'Lock already unlocked');
+            assert(raw_amount.is_non_zero(), 'Lock already unlocked');
             assert(get_block_timestamp() >= lock.unlock_time.read(), 'Lock not expired');
 
             lock.amount.write(0);
             lock.unlock_time.write(0);
 
+            // Compute effective (diluted) amount this lock is worth
             let current_locked = self.locked_liquidity.read();
-            if amount <= current_locked {
-                self.locked_liquidity.write(current_locked - amount);
+            let total_raw = self.total_raw_locked.read();
+            let effective = if total_raw.is_non_zero() {
+                raw_amount * current_locked / total_raw
+            } else {
+                0
+            };
+
+            // Decrement locked_liquidity by effective, total_raw_locked by raw
+            if effective <= current_locked {
+                self.locked_liquidity.write(current_locked - effective);
             } else {
                 self.locked_liquidity.write(0);
             }
 
-            self.emit(LiquidityUnlocked { user: caller, amount, lock_id });
+            if raw_amount <= total_raw {
+                self.total_raw_locked.write(total_raw - raw_amount);
+            } else {
+                self.total_raw_locked.write(0);
+            }
+
+            self.emit(LiquidityUnlocked { user: caller, amount: raw_amount, lock_id });
         }
 
         fn locked_balance(self: @ContractState, user: ContractAddress) -> u256 {

@@ -10,6 +10,7 @@ use contracts::coverage_token::{ICoverageTokenDispatcher, ICoverageTokenDispatch
 use contracts::protocol_registry::{
     IProtocolRegistryDispatcher, IProtocolRegistryDispatcherTrait,
 };
+use contracts::vault::{ILstVaultDispatcher, ILstVaultDispatcherTrait};
 
 // ERC4626 deposit dispatcher
 #[starknet::interface]
@@ -155,6 +156,23 @@ fn fund_and_approve(
     stop_cheat_caller_address(asset_addr);
 }
 
+/// Deposits into vault and locks full amount for 90 days.
+fn deposit_and_lock(
+    asset_addr: ContractAddress, vault_addr: ContractAddress, lp: ContractAddress, amount: u256,
+) {
+    fund_and_approve(asset_addr, lp, vault_addr, amount);
+
+    let vault = ITestERC4626Dispatcher { contract_address: vault_addr };
+    start_cheat_caller_address(vault_addr, lp);
+    vault.deposit(amount, lp);
+    stop_cheat_caller_address(vault_addr);
+
+    let vault_lock = ILstVaultDispatcher { contract_address: vault_addr };
+    start_cheat_caller_address(vault_addr, lp);
+    vault_lock.lock_liquidity(amount, DURATION_90_DAYS);
+    stop_cheat_caller_address(vault_addr);
+}
+
 // ═══════════════════════════════════════════════
 // DEPLOY & VIEW TESTS
 // ═══════════════════════════════════════════════
@@ -201,10 +219,13 @@ fn test_claimable_returns_zero_before_finalize() {
 
 #[test]
 fn test_buy_coverage() {
-    let (asset_addr, _vault, _reg, cov_addr, pm_addr) = setup_premium();
+    let (asset_addr, vault_addr, _reg, cov_addr, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
     let asset = ERC20ABIDispatcher { contract_address: asset_addr };
     let cov = ICoverageTokenDispatcher { contract_address: cov_addr };
+
+    // LP deposits and locks to provide vault liquidity for solvency check
+    deposit_and_lock(asset_addr, vault_addr, LP1(), LP_DEPOSIT);
 
     let premium = pm.preview_cost(COVERAGE_AMOUNT, DURATION_90_DAYS);
     fund_and_approve(asset_addr, BUYER(), pm_addr, premium);
@@ -247,8 +268,11 @@ fn test_buy_coverage_zero_duration_fails() {
 #[test]
 #[should_panic(expected: 'Exceeds coverage cap')]
 fn test_buy_coverage_exceeds_cap() {
-    let (asset_addr, _vault, _reg, _cov, pm_addr) = setup_premium();
+    let (asset_addr, vault_addr, _reg, _cov, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
+
+    // Lock liquidity — cap check triggers before solvency check anyway
+    deposit_and_lock(asset_addr, vault_addr, LP1(), LP_DEPOSIT);
 
     let huge = COVERAGE_CAP + 1;
     let premium = pm.preview_cost(huge, DURATION_90_DAYS);
@@ -256,6 +280,23 @@ fn test_buy_coverage_exceeds_cap() {
 
     start_cheat_caller_address(pm_addr, BUYER());
     pm.buy_coverage(huge, DURATION_90_DAYS);
+}
+
+#[test]
+#[should_panic(expected: 'Exceeds vault liquidity')]
+fn test_buy_coverage_exceeds_vault_liquidity() {
+    let (asset_addr, vault_addr, _reg, _cov, pm_addr) = setup_premium();
+    let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
+
+    // Lock only 50e18 but try to buy 100e18 coverage
+    let small_lock: u256 = 50_000_000_000_000_000_000;
+    deposit_and_lock(asset_addr, vault_addr, LP1(), small_lock);
+
+    let premium = pm.preview_cost(COVERAGE_AMOUNT, DURATION_90_DAYS);
+    fund_and_approve(asset_addr, BUYER(), pm_addr, premium);
+
+    start_cheat_caller_address(pm_addr, BUYER());
+    pm.buy_coverage(COVERAGE_AMOUNT, DURATION_90_DAYS); // 100e18 > 50e18 locked
 }
 
 // ═══════════════════════════════════════════════
@@ -266,33 +307,32 @@ fn test_buy_coverage_exceeds_cap() {
 fn test_checkpoint() {
     let (asset_addr, vault_addr, _reg, _cov, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
-    let vault = ITestERC4626Dispatcher { contract_address: vault_addr };
-    let vault_erc20 = ERC20ABIDispatcher { contract_address: vault_addr };
 
-    // LP1 deposits into vault
-    fund_and_approve(asset_addr, LP1(), vault_addr, LP_DEPOSIT);
-    start_cheat_caller_address(vault_addr, LP1());
-    vault.deposit(LP_DEPOSIT, LP1());
-    stop_cheat_caller_address(vault_addr);
-
-    let shares = vault_erc20.balance_of(LP1());
-    assert(shares > 0, 'LP should have shares');
+    // LP1 deposits and locks
+    deposit_and_lock(asset_addr, vault_addr, LP1(), LP_DEPOSIT);
 
     // Checkpoint
     start_cheat_caller_address(pm_addr, LP1());
     pm.checkpoint();
     stop_cheat_caller_address(pm_addr);
-    // No panic = success (checkpoint is recorded internally)
+    // No panic = success (checkpoint records locked balance)
 }
 
 #[test]
-#[should_panic(expected: 'No vault shares')]
-fn test_checkpoint_no_shares_fails() {
-    let (_asset, _vault, _reg, _cov, pm_addr) = setup_premium();
+#[should_panic(expected: 'No locked liquidity')]
+fn test_checkpoint_no_locked_liquidity_fails() {
+    let (asset_addr, vault_addr, _reg, _cov, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
 
-    // BUYER has no vault shares
-    start_cheat_caller_address(pm_addr, BUYER());
+    // LP1 deposits but does NOT lock
+    fund_and_approve(asset_addr, LP1(), vault_addr, LP_DEPOSIT);
+    let vault = ITestERC4626Dispatcher { contract_address: vault_addr };
+    start_cheat_caller_address(vault_addr, LP1());
+    vault.deposit(LP_DEPOSIT, LP1());
+    stop_cheat_caller_address(vault_addr);
+
+    // Checkpoint should fail — has shares but no locked liquidity
+    start_cheat_caller_address(pm_addr, LP1());
     pm.checkpoint();
 }
 
@@ -301,12 +341,8 @@ fn test_checkpoint_no_shares_fails() {
 fn test_checkpoint_duplicate_fails() {
     let (asset_addr, vault_addr, _reg, _cov, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
-    let vault = ITestERC4626Dispatcher { contract_address: vault_addr };
 
-    fund_and_approve(asset_addr, LP1(), vault_addr, LP_DEPOSIT);
-    start_cheat_caller_address(vault_addr, LP1());
-    vault.deposit(LP_DEPOSIT, LP1());
-    stop_cheat_caller_address(vault_addr);
+    deposit_and_lock(asset_addr, vault_addr, LP1(), LP_DEPOSIT);
 
     start_cheat_caller_address(pm_addr, LP1());
     pm.checkpoint();
@@ -321,13 +357,9 @@ fn test_checkpoint_duplicate_fails() {
 fn test_advance_epoch() {
     let (asset_addr, vault_addr, _reg, _cov, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
-    let vault = ITestERC4626Dispatcher { contract_address: vault_addr };
 
-    // LP deposits so total_supply > 0
-    fund_and_approve(asset_addr, LP1(), vault_addr, LP_DEPOSIT);
-    start_cheat_caller_address(vault_addr, LP1());
-    vault.deposit(LP_DEPOSIT, LP1());
-    stop_cheat_caller_address(vault_addr);
+    // LP deposits and locks so vault has liquidity
+    deposit_and_lock(asset_addr, vault_addr, LP1(), LP_DEPOSIT);
 
     // Buy some coverage to generate premiums
     let premium = pm.preview_cost(COVERAGE_AMOUNT, DURATION_90_DAYS);
@@ -363,13 +395,9 @@ fn test_full_epoch_lifecycle() {
     let (asset_addr, vault_addr, _reg, _cov, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
     let asset = ERC20ABIDispatcher { contract_address: asset_addr };
-    let vault = ITestERC4626Dispatcher { contract_address: vault_addr };
 
-    // 1. LP deposits into vault
-    fund_and_approve(asset_addr, LP1(), vault_addr, LP_DEPOSIT);
-    start_cheat_caller_address(vault_addr, LP1());
-    vault.deposit(LP_DEPOSIT, LP1());
-    stop_cheat_caller_address(vault_addr);
+    // 1. LP deposits and locks
+    deposit_and_lock(asset_addr, vault_addr, LP1(), LP_DEPOSIT);
 
     // 2. LP checkpoints
     start_cheat_caller_address(pm_addr, LP1());
@@ -410,12 +438,8 @@ fn test_full_epoch_lifecycle() {
 fn test_claim_not_finalized_fails() {
     let (asset_addr, vault_addr, _reg, _cov, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
-    let vault = ITestERC4626Dispatcher { contract_address: vault_addr };
 
-    fund_and_approve(asset_addr, LP1(), vault_addr, LP_DEPOSIT);
-    start_cheat_caller_address(vault_addr, LP1());
-    vault.deposit(LP_DEPOSIT, LP1());
-    stop_cheat_caller_address(vault_addr);
+    deposit_and_lock(asset_addr, vault_addr, LP1(), LP_DEPOSIT);
 
     start_cheat_caller_address(pm_addr, LP1());
     pm.checkpoint();
@@ -428,12 +452,8 @@ fn test_claim_not_finalized_fails() {
 fn test_double_claim_fails() {
     let (asset_addr, vault_addr, _reg, _cov, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
-    let vault = ITestERC4626Dispatcher { contract_address: vault_addr };
 
-    fund_and_approve(asset_addr, LP1(), vault_addr, LP_DEPOSIT);
-    start_cheat_caller_address(vault_addr, LP1());
-    vault.deposit(LP_DEPOSIT, LP1());
-    stop_cheat_caller_address(vault_addr);
+    deposit_and_lock(asset_addr, vault_addr, LP1(), LP_DEPOSIT);
 
     start_cheat_caller_address(pm_addr, LP1());
     pm.checkpoint();
@@ -462,20 +482,13 @@ fn test_two_lps_proportional_claims() {
     let (asset_addr, vault_addr, _reg, _cov, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
     let asset = ERC20ABIDispatcher { contract_address: asset_addr };
-    let vault = ITestERC4626Dispatcher { contract_address: vault_addr };
 
-    // LP1 deposits 200e18
-    fund_and_approve(asset_addr, LP1(), vault_addr, LP_DEPOSIT);
-    start_cheat_caller_address(vault_addr, LP1());
-    vault.deposit(LP_DEPOSIT, LP1());
-    stop_cheat_caller_address(vault_addr);
+    // LP1 deposits and locks 200e18
+    deposit_and_lock(asset_addr, vault_addr, LP1(), LP_DEPOSIT);
 
-    // LP2 deposits 100e18
+    // LP2 deposits and locks 100e18
     let lp2_deposit: u256 = 100_000_000_000_000_000_000;
-    fund_and_approve(asset_addr, LP2(), vault_addr, lp2_deposit);
-    start_cheat_caller_address(vault_addr, LP2());
-    vault.deposit(lp2_deposit, LP2());
-    stop_cheat_caller_address(vault_addr);
+    deposit_and_lock(asset_addr, vault_addr, LP2(), lp2_deposit);
 
     // Both checkpoint
     start_cheat_caller_address(pm_addr, LP1());
@@ -498,12 +511,12 @@ fn test_two_lps_proportional_claims() {
     pm.advance_epoch();
     stop_cheat_caller_address(pm_addr);
 
-    // Verify proportional claims
+    // Verify proportional claims (based on locked amounts)
     let c1 = pm.claimable(1, LP1());
     let c2 = pm.claimable(1, LP2());
     assert(c1 > 0, 'LP1 should have claimable');
     assert(c2 > 0, 'LP2 should have claimable');
-    assert(c1 > c2, 'LP1 deposited more, gets more');
+    assert(c1 > c2, 'LP1 locked more, gets more');
 
     // LP1 claims
     let bal1_before = asset.balance_of(LP1());
@@ -526,9 +539,12 @@ fn test_two_lps_proportional_claims() {
 
 #[test]
 fn test_expire_coverage() {
-    let (asset_addr, _vault, _reg, cov_addr, pm_addr) = setup_premium();
+    let (asset_addr, vault_addr, _reg, cov_addr, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
     let cov = ICoverageTokenDispatcher { contract_address: cov_addr };
+
+    // LP deposits and locks to provide vault liquidity
+    deposit_and_lock(asset_addr, vault_addr, LP1(), LP_DEPOSIT);
 
     let premium = pm.preview_cost(COVERAGE_AMOUNT, DURATION_90_DAYS);
     fund_and_approve(asset_addr, BUYER(), pm_addr, premium);
@@ -551,8 +567,10 @@ fn test_expire_coverage() {
 #[test]
 #[should_panic(expected: 'Coverage still active')]
 fn test_expire_active_coverage_fails() {
-    let (asset_addr, _vault, _reg, _cov, pm_addr) = setup_premium();
+    let (asset_addr, vault_addr, _reg, _cov, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
+
+    deposit_and_lock(asset_addr, vault_addr, LP1(), LP_DEPOSIT);
 
     let premium = pm.preview_cost(COVERAGE_AMOUNT, DURATION_90_DAYS);
     fund_and_approve(asset_addr, BUYER(), pm_addr, premium);
@@ -568,8 +586,10 @@ fn test_expire_active_coverage_fails() {
 #[test]
 #[should_panic(expected: 'Not tracked or already expired')]
 fn test_expire_already_expired_fails() {
-    let (asset_addr, _vault, _reg, _cov, pm_addr) = setup_premium();
+    let (asset_addr, vault_addr, _reg, _cov, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
+
+    deposit_and_lock(asset_addr, vault_addr, LP1(), LP_DEPOSIT);
 
     let premium = pm.preview_cost(COVERAGE_AMOUNT, DURATION_90_DAYS);
     fund_and_approve(asset_addr, BUYER(), pm_addr, premium);

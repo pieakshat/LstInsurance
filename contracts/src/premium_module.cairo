@@ -55,6 +55,7 @@ pub mod PremiumModule {
     use contracts::protocol_registry::{
         IProtocolRegistryDispatcher, IProtocolRegistryDispatcherTrait,
     };
+    use contracts::vault::{ILstVaultDispatcher, ILstVaultDispatcherTrait};
 
     pub const OWNER_ROLE: felt252 = selector!("OWNER_ROLE");
     pub const GOVERNANCE_ROLE: felt252 = selector!("GOVERNANCE_ROLE");
@@ -225,6 +226,10 @@ pub mod PremiumModule {
             let new_total = self.total_active_coverage.read() + coverage_amount;
             assert(new_total <= protocol.coverage_cap, 'Exceeds coverage cap');
 
+            // Solvency check — vault must have enough locked liquidity to back coverage
+            let vault_disp = ILstVaultDispatcher { contract_address: self.vault.read() };
+            assert(new_total <= vault_disp.total_locked_liquidity(), 'Exceeds vault liquidity');
+
             let premium = compute_premium(coverage_amount, protocol.premium_rate, duration);
             assert(premium.is_non_zero(), 'Premium too small');
 
@@ -279,13 +284,13 @@ pub mod PremiumModule {
             let existing = self.epoch_lp_checkpoint.entry(epoch).entry(caller).read();
             assert(existing.is_zero(), 'Already checkpointed');
 
-            let vault = ERC20ABIDispatcher { contract_address: self.vault.read() };
-            let lp_shares = vault.balance_of(caller);
-            assert(lp_shares.is_non_zero(), 'No vault shares');
+            let vault = ILstVaultDispatcher { contract_address: self.vault.read() };
+            let lp_locked = vault.locked_balance(caller);
+            assert(lp_locked.is_non_zero(), 'No locked liquidity');
 
-            self.epoch_lp_checkpoint.entry(epoch).entry(caller).write(lp_shares);
+            self.epoch_lp_checkpoint.entry(epoch).entry(caller).write(lp_locked);
 
-            self.emit(LPCheckpointed { lp: caller, epoch, shares: lp_shares });
+            self.emit(LPCheckpointed { lp: caller, epoch, shares: lp_locked });
         }
 
         fn claim_premiums(ref self: ContractState, epoch: u32) {
@@ -347,10 +352,10 @@ pub mod PremiumModule {
             let premiums = self.pending_premiums.read();
             self.epoch_premiums_collected.entry(epoch).write(premiums);
 
-            // Snapshot vault total supply at epoch end
-            let vault = ERC20ABIDispatcher { contract_address: self.vault.read() };
-            let total_shares = vault.total_supply();
-            self.epoch_total_shares.entry(epoch).write(total_shares);
+            // Snapshot total locked liquidity at epoch end
+            let vault = ILstVaultDispatcher { contract_address: self.vault.read() };
+            let total_locked = vault.total_locked_liquidity();
+            self.epoch_total_shares.entry(epoch).write(total_locked);
 
             // Reset pending and advance
             self.pending_premiums.write(0);
@@ -358,7 +363,7 @@ pub mod PremiumModule {
             self.current_epoch.write(new_epoch);
             self.epoch_start_time.entry(new_epoch).write(get_block_timestamp());
 
-            self.emit(EpochAdvanced { epoch, total_premiums: premiums, total_shares });
+            self.emit(EpochAdvanced { epoch, total_premiums: premiums, total_shares: total_locked });
         }
 
         fn expire_coverage(ref self: ContractState, token_id: u256) {

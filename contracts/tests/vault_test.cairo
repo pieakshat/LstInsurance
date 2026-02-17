@@ -384,6 +384,11 @@ fn test_vault_claims_manager_payout() {
 
     assert(asset.balance_of(USER2()) == payout, 'Payout not received');
     assert(vault.total_payouts() == payout, 'Payout tracking wrong');
+
+    // After payout: locked_liquidity = 25e18, total_raw_locked = 50e18
+    // LP's effective locked = 50 * 25 / 50 = 25e18 (diluted from 50)
+    assert(vault.total_locked_liquidity() == DEPOSIT_AMOUNT / 4, 'Locked should be diluted');
+    assert(vault.locked_balance(USER1()) == DEPOSIT_AMOUNT / 4, 'LP lock diluted by payout');
 }
 
 #[test]
@@ -443,6 +448,73 @@ fn test_vault_solvency_views() {
     assert(vault.solvency_locked() == DEPOSIT_AMOUNT / 2, 'Solvency locked wrong');
     // coverage_capacity = locked * leverage
     assert(vault.coverage_capacity(2) == DEPOSIT_AMOUNT, 'Coverage capacity wrong');
+}
+
+#[test]
+fn test_payout_dilutes_lp_locks() {
+    let (asset_addr, vault_addr) = setup_vault();
+
+    let vault = ILstVaultDispatcher { contract_address: vault_addr };
+    let vault_erc4626 = ITestERC4626Dispatcher { contract_address: vault_addr };
+    let asset = ERC20ABIDispatcher { contract_address: asset_addr };
+
+    start_cheat_block_timestamp_global(1000);
+
+    // Fund USER2 as well
+    start_cheat_caller_address(asset_addr, OWNER());
+    asset.transfer(USER2(), DEPOSIT_AMOUNT * 2);
+    stop_cheat_caller_address(asset_addr);
+
+    start_cheat_caller_address(asset_addr, USER2());
+    asset.approve(vault_addr, DEPOSIT_AMOUNT * 2);
+    stop_cheat_caller_address(asset_addr);
+
+    // USER1 deposits 100e18, locks 60e18 for 1 day
+    start_cheat_caller_address(vault_addr, USER1());
+    vault_erc4626.deposit(DEPOSIT_AMOUNT, USER1());
+    vault.lock_liquidity(60_000_000_000_000_000_000, 86400); // 60e18, 1 day
+    stop_cheat_caller_address(vault_addr);
+
+    // USER2 deposits 100e18, locks 40e18 for 2 days (longer lock)
+    start_cheat_caller_address(vault_addr, USER2());
+    vault_erc4626.deposit(DEPOSIT_AMOUNT, USER2());
+    vault.lock_liquidity(40_000_000_000_000_000_000, 172800); // 40e18, 2 days
+    stop_cheat_caller_address(vault_addr);
+
+    // Total locked = 100e18, total_raw_locked = 100e18
+    assert(vault.total_locked_liquidity() == DEPOSIT_AMOUNT, 'Total locked = 100');
+    assert(vault.locked_balance(USER1()) == 60_000_000_000_000_000_000, 'USER1 locked = 60');
+    assert(vault.locked_balance(USER2()) == 40_000_000_000_000_000_000, 'USER2 locked = 40');
+
+    // Set claims manager and do a 20e18 payout
+    start_cheat_caller_address(vault_addr, OWNER());
+    vault.set_claims_manager(CLAIMS_MANAGER());
+    stop_cheat_caller_address(vault_addr);
+
+    let payout: u256 = 20_000_000_000_000_000_000; // 20e18
+    start_cheat_caller_address(vault_addr, CLAIMS_MANAGER());
+    vault.withdraw_for_payout(0x999.try_into().unwrap(), payout);
+    stop_cheat_caller_address(vault_addr);
+
+    // After payout: locked_liquidity = 80e18, total_raw_locked = 100e18
+    // USER1 effective = 60 * 80 / 100 = 48e18
+    // USER2 effective = 40 * 80 / 100 = 32e18
+    assert(vault.total_locked_liquidity() == 80_000_000_000_000_000_000, 'Total locked = 80');
+    assert(vault.locked_balance(USER1()) == 48_000_000_000_000_000_000, 'USER1 diluted to 48');
+    assert(vault.locked_balance(USER2()) == 32_000_000_000_000_000_000, 'USER2 diluted to 32');
+
+    // Advance past USER1's lock (1000+86400=87400) but NOT USER2's (1000+172800=173800)
+    start_cheat_block_timestamp_global(87401);
+
+    start_cheat_caller_address(vault_addr, USER1());
+    vault.unlock_liquidity(0);
+    stop_cheat_caller_address(vault_addr);
+
+    // After USER1 unlock: locked_liquidity = 80 - 48 = 32, total_raw = 100 - 60 = 40
+    // USER2 effective = 40 * 32 / 40 = 32e18 (unchanged, correct)
+    assert(vault.total_locked_liquidity() == 32_000_000_000_000_000_000, 'After unlock total = 32');
+    assert(vault.locked_balance(USER1()) == 0, 'USER1 fully unlocked');
+    assert(vault.locked_balance(USER2()) == 32_000_000_000_000_000_000, 'USER2 still 32');
 }
 
 // ═══════════════════════════════════════════════
