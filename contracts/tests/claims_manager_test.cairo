@@ -447,6 +447,20 @@ fn test_reject_already_rejected_fails() {
 // ═══════════════════════════════════════════════
 
 #[test]
+#[should_panic(expected: 'Coverage expired')]
+fn test_submit_claim_expired_coverage_fails() {
+    let (cm_addr, _, _, _, token_id) = setup_full();
+    let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
+
+    // Advance past coverage expiry (BASE_TIME + NINETY_DAYS)
+    start_cheat_block_timestamp_global(BASE_TIME + NINETY_DAYS + 1);
+
+    start_cheat_caller_address(cm_addr, USER());
+    cm.submit_claim(token_id);
+    stop_cheat_caller_address(cm_addr);
+}
+
+#[test]
 #[should_panic(expected: 'Claim does not exist')]
 fn test_get_nonexistent_claim_fails() {
     start_cheat_block_timestamp_global(BASE_TIME);

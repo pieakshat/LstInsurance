@@ -75,6 +75,7 @@ pub mod ClaimsManager {
         fn owner_of(self: @T, token_id: u256) -> ContractAddress;
         fn coverage_amount(self: @T, token_id: u256) -> u256;
         fn coverage_protocol(self: @T, token_id: u256) -> u256;
+        fn is_active(self: @T, token_id: u256) -> bool;
     }
 
     // ── Storage node for claims ──
@@ -188,6 +189,9 @@ pub mod ClaimsManager {
             };
             let nft_owner = cov.owner_of(token_id);
             assert(nft_owner == caller, 'Not NFT owner');
+
+            // Reject expired coverage
+            assert(cov.is_active(token_id), 'Coverage expired');
 
             // Prevent double claims on the same NFT
             assert(!self.token_claimed.entry(token_id).read(), 'Already claimed');
