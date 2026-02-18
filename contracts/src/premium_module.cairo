@@ -14,6 +14,11 @@
 //      supply, increments epoch
 //   4. LPs call claim_premiums(epoch) for past epochs using their checkpoint
 //
+// Coverage lifecycle:
+//   - buy_coverage() locks vault capital via vault.lock_for_coverage()
+//   - expire_coverage() unlocks vault capital via vault.unlock_from_coverage()
+//   - notify_claim_payout() cleans up PM state after claims manager payout
+//
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[starknet::interface]
@@ -30,6 +35,9 @@ pub trait IPremiumModule<TContractState> {
 
     fn advance_epoch(ref self: TContractState);
     fn expire_coverage(ref self: TContractState, token_id: u256);
+    fn notify_claim_payout(ref self: TContractState, token_id: u256);
+
+    fn set_claims_manager(ref self: TContractState, cm: starknet::ContractAddress);
 
     fn current_epoch(self: @TContractState) -> u32;
     fn epoch_premiums(self: @TContractState, epoch: u32) -> u256;
@@ -86,6 +94,7 @@ pub mod PremiumModule {
         registry: ContractAddress,
         coverage_token: ContractAddress,
         asset: ContractAddress,
+        claims_manager: ContractAddress,
         total_active_coverage: u256,
         coverage_amounts: Map<u256, u256>, // token_id => coverage_amount
         user_subscribed: Map<ContractAddress, bool>,
@@ -226,9 +235,12 @@ pub mod PremiumModule {
             let new_total = self.total_active_coverage.read() + coverage_amount;
             assert(new_total <= protocol.coverage_cap, 'Exceeds coverage cap');
 
-            // Solvency check — vault must have enough locked liquidity to back coverage
+            // Solvency check — vault must have enough available liquidity
             let vault_disp = ILstVaultDispatcher { contract_address: self.vault.read() };
-            assert(new_total <= vault_disp.total_locked_liquidity(), 'Exceeds vault liquidity');
+            assert(
+                vault_disp.available_liquidity() >= coverage_amount,
+                'Exceeds vault liquidity',
+            );
 
             let premium = compute_premium(coverage_amount, protocol.premium_rate, duration);
             assert(premium.is_non_zero(), 'Premium too small');
@@ -244,6 +256,9 @@ pub mod PremiumModule {
             let token_id = coverage_token.mint_coverage(
                 caller, protocol_id, coverage_amount, duration, premium,
             );
+
+            // Lock vault capital for this coverage
+            vault_disp.lock_for_coverage(coverage_amount);
 
             self.total_active_coverage.write(new_total);
             self.coverage_amounts.entry(token_id).write(coverage_amount);
@@ -284,13 +299,14 @@ pub mod PremiumModule {
             let existing = self.epoch_lp_checkpoint.entry(epoch).entry(caller).read();
             assert(existing.is_zero(), 'Already checkpointed');
 
-            let vault = ILstVaultDispatcher { contract_address: self.vault.read() };
-            let lp_locked = vault.locked_balance(caller);
-            assert(lp_locked.is_non_zero(), 'No locked liquidity');
+            // Use vault share balance instead of locked balance
+            let vault_shares = ERC20ABIDispatcher { contract_address: self.vault.read() };
+            let lp_shares = vault_shares.balance_of(caller);
+            assert(lp_shares.is_non_zero(), 'No vault shares');
 
-            self.epoch_lp_checkpoint.entry(epoch).entry(caller).write(lp_locked);
+            self.epoch_lp_checkpoint.entry(epoch).entry(caller).write(lp_shares);
 
-            self.emit(LPCheckpointed { lp: caller, epoch, shares: lp_locked });
+            self.emit(LPCheckpointed { lp: caller, epoch, shares: lp_shares });
         }
 
         fn claim_premiums(ref self: ContractState, epoch: u32) {
@@ -352,10 +368,10 @@ pub mod PremiumModule {
             let premiums = self.pending_premiums.read();
             self.epoch_premiums_collected.entry(epoch).write(premiums);
 
-            // Snapshot total locked liquidity at epoch end
-            let vault = ILstVaultDispatcher { contract_address: self.vault.read() };
-            let total_locked = vault.total_locked_liquidity();
-            self.epoch_total_shares.entry(epoch).write(total_locked);
+            // Snapshot total vault share supply at epoch end
+            let vault_shares = ERC20ABIDispatcher { contract_address: self.vault.read() };
+            let total_supply = vault_shares.total_supply();
+            self.epoch_total_shares.entry(epoch).write(total_supply);
 
             // Reset pending and advance
             self.pending_premiums.write(0);
@@ -363,7 +379,10 @@ pub mod PremiumModule {
             self.current_epoch.write(new_epoch);
             self.epoch_start_time.entry(new_epoch).write(get_block_timestamp());
 
-            self.emit(EpochAdvanced { epoch, total_premiums: premiums, total_shares: total_locked });
+            self
+                .emit(
+                    EpochAdvanced { epoch, total_premiums: premiums, total_shares: total_supply },
+                );
         }
 
         fn expire_coverage(ref self: ContractState, token_id: u256) {
@@ -375,6 +394,10 @@ pub mod PremiumModule {
             let amount = self.coverage_amounts.entry(token_id).read();
             assert(amount.is_non_zero(), 'Not tracked or already expired');
 
+            // Unlock vault capital
+            let vault_disp = ILstVaultDispatcher { contract_address: self.vault.read() };
+            vault_disp.unlock_from_coverage(amount);
+
             let current_total = self.total_active_coverage.read();
             if current_total >= amount {
                 self.total_active_coverage.write(current_total - amount);
@@ -385,6 +408,30 @@ pub mod PremiumModule {
             self.coverage_amounts.entry(token_id).write(0);
 
             self.emit(CoverageExpired { token_id, amount_freed: amount });
+        }
+
+        /// Called by claims manager after a claim payout. Cleans up PM state.
+        /// Does NOT touch vault locks — payout already reduced locked_liquidity.
+        fn notify_claim_payout(ref self: ContractState, token_id: u256) {
+            let caller = get_caller_address();
+            let cm = self.claims_manager.read();
+            assert(caller == cm, 'Only claims manager');
+
+            let amount = self.coverage_amounts.entry(token_id).read();
+            if amount.is_non_zero() {
+                let current_total = self.total_active_coverage.read();
+                if current_total >= amount {
+                    self.total_active_coverage.write(current_total - amount);
+                } else {
+                    self.total_active_coverage.write(0);
+                }
+                self.coverage_amounts.entry(token_id).write(0);
+            }
+        }
+
+        fn set_claims_manager(ref self: ContractState, cm: ContractAddress) {
+            self.access_control.assert_only_role(OWNER_ROLE);
+            self.claims_manager.write(cm);
         }
 
         fn current_epoch(self: @ContractState) -> u32 {

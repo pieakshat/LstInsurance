@@ -4,7 +4,7 @@
 //
 // Tests the full claim lifecycle:
 //   - User submits claim with Coverage NFT
-//   - Governor approves → vault pays out, NFT burned
+//   - Governor approves → vault pays out, NFT burned, PM notified
 //   - Governor rejects → user can re-submit
 //   - Access control & edge cases
 //
@@ -20,6 +20,8 @@ use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrai
 use contracts::claims_manager::{IClaimsManagerDispatcher, IClaimsManagerDispatcherTrait, ClaimData};
 use contracts::coverage_token::{ICoverageTokenDispatcher, ICoverageTokenDispatcherTrait};
 use contracts::vault::{ILstVaultDispatcher, ILstVaultDispatcherTrait};
+use contracts::premium_module::{IPremiumModuleDispatcher, IPremiumModuleDispatcherTrait};
+use contracts::protocol_registry::{IProtocolRegistryDispatcher, IProtocolRegistryDispatcherTrait};
 
 #[starknet::interface]
 trait ITestERC4626<TContractState> {
@@ -42,6 +44,9 @@ fn USER() -> ContractAddress {
 }
 fn RANDOM() -> ContractAddress {
     0x5.try_into().unwrap()
+}
+fn PROTOCOL_ADDR() -> ContractAddress {
+    0x100.try_into().unwrap()
 }
 
 // ── Constants ──
@@ -85,13 +90,41 @@ fn deploy_coverage_token() -> ContractAddress {
     addr
 }
 
+fn deploy_registry() -> ContractAddress {
+    let contract = declare("ProtocolRegistry").unwrap().contract_class();
+    let mut calldata: Array<felt252> = array![];
+    OWNER().serialize(ref calldata);
+    let (addr, _) = contract.deploy(@calldata).unwrap();
+    addr
+}
+
+fn deploy_premium_module(
+    protocol_id: u256,
+    vault: ContractAddress,
+    registry: ContractAddress,
+    coverage_token: ContractAddress,
+    asset: ContractAddress,
+) -> ContractAddress {
+    let contract = declare("PremiumModule").unwrap().contract_class();
+    let mut calldata: Array<felt252> = array![];
+    protocol_id.serialize(ref calldata);
+    vault.serialize(ref calldata);
+    registry.serialize(ref calldata);
+    coverage_token.serialize(ref calldata);
+    asset.serialize(ref calldata);
+    OWNER().serialize(ref calldata);
+    let (addr, _) = contract.deploy(@calldata).unwrap();
+    addr
+}
+
 fn deploy_claims_manager(
-    vault: ContractAddress, coverage_token: ContractAddress,
+    vault: ContractAddress, coverage_token: ContractAddress, premium_module: ContractAddress,
 ) -> ContractAddress {
     let contract = declare("ClaimsManager").unwrap().contract_class();
     let mut calldata: Array<felt252> = array![];
     vault.serialize(ref calldata);
     coverage_token.serialize(ref calldata);
+    premium_module.serialize(ref calldata);
     OWNER().serialize(ref calldata);
     let (addr, _) = contract.deploy(@calldata).unwrap();
     addr
@@ -110,16 +143,35 @@ fn fund_and_approve(
     stop_cheat_caller_address(token);
 }
 
-/// Full setup: deploys LST, vault, coverage token, claims manager.
-/// Funds vault with LP deposit, locks liquidity, mints a coverage NFT to USER.
-/// Returns (claims_manager, vault, coverage_token, lst, token_id).
-fn setup_full() -> (ContractAddress, ContractAddress, ContractAddress, ContractAddress, u256) {
+/// Full setup: deploys LST, vault, coverage token, premium module, claims manager.
+/// Funds vault with LP deposit, locks liquidity via coverage manager, mints a coverage NFT to USER.
+/// Returns (claims_manager, vault, coverage_token, lst, token_id, premium_module).
+fn setup_full() -> (ContractAddress, ContractAddress, ContractAddress, ContractAddress, u256, ContractAddress) {
     start_cheat_block_timestamp_global(BASE_TIME);
 
     let lst = deploy_erc20(TOKEN_SUPPLY);
     let vault_addr = deploy_vault(lst);
     let cov_addr = deploy_coverage_token();
-    let cm_addr = deploy_claims_manager(vault_addr, cov_addr);
+    let registry_addr = deploy_registry();
+
+    // Register protocol
+    let registry = IProtocolRegistryDispatcher { contract_address: registry_addr };
+    start_cheat_caller_address(registry_addr, OWNER());
+    registry.set_governance(OWNER());
+    registry.register_protocol(PROTOCOL_ADDR(), vault_addr, TOKEN_SUPPLY, 500);
+    stop_cheat_caller_address(registry_addr);
+
+    // Deploy premium module
+    let pm_addr = deploy_premium_module(1, vault_addr, registry_addr, cov_addr, lst);
+
+    // Deploy claims manager with premium_module address
+    let cm_addr = deploy_claims_manager(vault_addr, cov_addr, pm_addr);
+
+    // Set claims manager on premium module
+    let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
+    start_cheat_caller_address(pm_addr, OWNER());
+    pm.set_claims_manager(cm_addr);
+    stop_cheat_caller_address(pm_addr);
 
     // Grant CLAIMS_MANAGER_ROLE to claims manager on vault
     let vault = ILstVaultDispatcher { contract_address: vault_addr };
@@ -127,10 +179,20 @@ fn setup_full() -> (ContractAddress, ContractAddress, ContractAddress, ContractA
     vault.set_claims_manager(cm_addr);
     stop_cheat_caller_address(vault_addr);
 
+    // Grant COVERAGE_MANAGER_ROLE to premium module on vault
+    start_cheat_caller_address(vault_addr, OWNER());
+    vault.set_coverage_manager(pm_addr);
+    stop_cheat_caller_address(vault_addr);
+
     // Grant BURNER_ROLE to claims manager on coverage token
     let cov = ICoverageTokenDispatcher { contract_address: cov_addr };
     start_cheat_caller_address(cov_addr, OWNER());
     cov.set_burner(cm_addr);
+    stop_cheat_caller_address(cov_addr);
+
+    // Grant MINTER_ROLE to premium module on coverage token
+    start_cheat_caller_address(cov_addr, OWNER());
+    cov.set_minter(pm_addr);
     stop_cheat_caller_address(cov_addr);
 
     // Add GOVERNOR
@@ -147,18 +209,16 @@ fn setup_full() -> (ContractAddress, ContractAddress, ContractAddress, ContractA
     vault_4626.deposit(lp_deposit, LP1());
     stop_cheat_caller_address(vault_addr);
 
-    // LP locks liquidity (needed for withdraw_for_payout to work)
-    start_cheat_caller_address(vault_addr, LP1());
-    vault.lock_liquidity(lp_deposit, NINETY_DAYS);
-    stop_cheat_caller_address(vault_addr);
-
-    // Mint a coverage NFT to USER (OWNER has MINTER_ROLE)
+    // Buy coverage via premium module — this auto-locks vault capital
     let coverage_amount: u256 = 500_000_000_000_000_000_000; // 500e18
-    start_cheat_caller_address(cov_addr, OWNER());
-    let token_id = cov.mint_coverage(USER(), 1, coverage_amount, NINETY_DAYS, 25_000_000_000_000_000_000);
-    stop_cheat_caller_address(cov_addr);
+    let premium = pm.preview_cost(coverage_amount, NINETY_DAYS);
+    fund_and_approve(lst, USER(), pm_addr, premium);
 
-    (cm_addr, vault_addr, cov_addr, lst, token_id)
+    start_cheat_caller_address(pm_addr, USER());
+    let token_id = pm.buy_coverage(coverage_amount, NINETY_DAYS);
+    stop_cheat_caller_address(pm_addr);
+
+    (cm_addr, vault_addr, cov_addr, lst, token_id, pm_addr)
 }
 
 // ═══════════════════════════════════════════════
@@ -172,7 +232,8 @@ fn test_deploy_initial_state() {
     let lst = deploy_erc20(TOKEN_SUPPLY);
     let vault_addr = deploy_vault(lst);
     let cov_addr = deploy_coverage_token();
-    let cm_addr = deploy_claims_manager(vault_addr, cov_addr);
+    // Use zero address for PM in simple deploy test
+    let cm_addr = deploy_claims_manager(vault_addr, cov_addr, 0x999.try_into().unwrap());
 
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
     assert(cm.next_claim_id() == 1, 'Starts at 1');
@@ -186,7 +247,7 @@ fn test_add_governor() {
     let lst = deploy_erc20(TOKEN_SUPPLY);
     let vault_addr = deploy_vault(lst);
     let cov_addr = deploy_coverage_token();
-    let cm_addr = deploy_claims_manager(vault_addr, cov_addr);
+    let cm_addr = deploy_claims_manager(vault_addr, cov_addr, 0x999.try_into().unwrap());
 
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
 
@@ -204,7 +265,7 @@ fn test_remove_governor() {
     let lst = deploy_erc20(TOKEN_SUPPLY);
     let vault_addr = deploy_vault(lst);
     let cov_addr = deploy_coverage_token();
-    let cm_addr = deploy_claims_manager(vault_addr, cov_addr);
+    let cm_addr = deploy_claims_manager(vault_addr, cov_addr, 0x999.try_into().unwrap());
 
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
 
@@ -224,7 +285,7 @@ fn test_add_governor_non_owner_fails() {
     let lst = deploy_erc20(TOKEN_SUPPLY);
     let vault_addr = deploy_vault(lst);
     let cov_addr = deploy_coverage_token();
-    let cm_addr = deploy_claims_manager(vault_addr, cov_addr);
+    let cm_addr = deploy_claims_manager(vault_addr, cov_addr, 0x999.try_into().unwrap());
 
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
 
@@ -239,7 +300,7 @@ fn test_add_governor_non_owner_fails() {
 
 #[test]
 fn test_submit_claim() {
-    let (cm_addr, _, _, _, token_id) = setup_full();
+    let (cm_addr, _, _, _, token_id, _) = setup_full();
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
 
     start_cheat_caller_address(cm_addr, USER());
@@ -263,7 +324,7 @@ fn test_submit_claim() {
 #[test]
 #[should_panic(expected: 'Not NFT owner')]
 fn test_submit_claim_not_owner_fails() {
-    let (cm_addr, _, _, _, token_id) = setup_full();
+    let (cm_addr, _, _, _, token_id, _) = setup_full();
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
 
     // RANDOM doesn't own the NFT
@@ -275,7 +336,7 @@ fn test_submit_claim_not_owner_fails() {
 #[test]
 #[should_panic(expected: 'Already claimed')]
 fn test_submit_claim_double_fails() {
-    let (cm_addr, _, _, _, token_id) = setup_full();
+    let (cm_addr, _, _, _, token_id, _) = setup_full();
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
 
     start_cheat_caller_address(cm_addr, USER());
@@ -291,21 +352,23 @@ fn test_submit_claim_double_fails() {
 
 #[test]
 fn test_approve_claim_full_flow() {
-    let (cm_addr, vault_addr, cov_addr, lst, token_id) = setup_full();
+    let (cm_addr, vault_addr, cov_addr, lst, token_id, pm_addr) = setup_full();
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
     let lst_token = ERC20ABIDispatcher { contract_address: lst };
     let cov = ICoverageTokenDispatcher { contract_address: cov_addr };
+    let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
+    let vault = ILstVaultDispatcher { contract_address: vault_addr };
 
     let coverage_amount: u256 = 500_000_000_000_000_000_000;
+
+    // Verify vault locked before claim
+    assert(vault.total_locked_liquidity() == coverage_amount, 'Vault locked 500');
+    assert(pm.total_active_coverage() == coverage_amount, 'PM active 500');
 
     // User submits claim
     start_cheat_caller_address(cm_addr, USER());
     let claim_id = cm.submit_claim(token_id);
     stop_cheat_caller_address(cm_addr);
-
-    // Check user has no LST before
-    let user_balance_before = lst_token.balance_of(USER());
-    assert(user_balance_before == 0, 'User starts with 0 LST');
 
     // Governor approves
     start_cheat_caller_address(cm_addr, GOVERNOR());
@@ -324,15 +387,18 @@ fn test_approve_claim_full_flow() {
     // Verify: NFT was burned
     assert(!cov.is_active(token_id), 'NFT should be burned');
 
-    // Verify: vault paid out
-    let vault = ILstVaultDispatcher { contract_address: vault_addr };
+    // Verify: vault paid out and locked decreased
     assert(vault.total_payouts() == coverage_amount, 'Vault tracked payout');
+    assert(vault.total_locked_liquidity() == 0, 'Vault lock cleared by payout');
+
+    // Verify: PM state cleaned via notify_claim_payout
+    assert(pm.total_active_coverage() == 0, 'PM coverage cleared');
 }
 
 #[test]
 #[should_panic]
 fn test_approve_claim_non_governor_fails() {
-    let (cm_addr, _, _, _, token_id) = setup_full();
+    let (cm_addr, _, _, _, token_id, _) = setup_full();
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
 
     start_cheat_caller_address(cm_addr, USER());
@@ -348,7 +414,7 @@ fn test_approve_claim_non_governor_fails() {
 #[test]
 #[should_panic(expected: 'Claim not pending')]
 fn test_approve_already_approved_fails() {
-    let (cm_addr, _, _, _, token_id) = setup_full();
+    let (cm_addr, _, _, _, token_id, _) = setup_full();
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
 
     start_cheat_caller_address(cm_addr, USER());
@@ -368,7 +434,7 @@ fn test_approve_already_approved_fails() {
 
 #[test]
 fn test_reject_claim() {
-    let (cm_addr, _, _, _, token_id) = setup_full();
+    let (cm_addr, _, _, _, token_id, _) = setup_full();
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
 
     start_cheat_caller_address(cm_addr, USER());
@@ -389,7 +455,7 @@ fn test_reject_claim() {
 
 #[test]
 fn test_reject_then_resubmit() {
-    let (cm_addr, _, _, _, token_id) = setup_full();
+    let (cm_addr, _, _, _, token_id, _) = setup_full();
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
 
     // Submit
@@ -414,7 +480,7 @@ fn test_reject_then_resubmit() {
 #[test]
 #[should_panic]
 fn test_reject_non_governor_fails() {
-    let (cm_addr, _, _, _, token_id) = setup_full();
+    let (cm_addr, _, _, _, token_id, _) = setup_full();
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
 
     start_cheat_caller_address(cm_addr, USER());
@@ -429,7 +495,7 @@ fn test_reject_non_governor_fails() {
 #[test]
 #[should_panic(expected: 'Claim not pending')]
 fn test_reject_already_rejected_fails() {
-    let (cm_addr, _, _, _, token_id) = setup_full();
+    let (cm_addr, _, _, _, token_id, _) = setup_full();
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
 
     start_cheat_caller_address(cm_addr, USER());
@@ -449,7 +515,7 @@ fn test_reject_already_rejected_fails() {
 #[test]
 #[should_panic(expected: 'Coverage expired')]
 fn test_submit_claim_expired_coverage_fails() {
-    let (cm_addr, _, _, _, token_id) = setup_full();
+    let (cm_addr, _, _, _, token_id, _) = setup_full();
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
 
     // Advance past coverage expiry (BASE_TIME + NINETY_DAYS)
@@ -468,7 +534,7 @@ fn test_get_nonexistent_claim_fails() {
     let lst = deploy_erc20(TOKEN_SUPPLY);
     let vault_addr = deploy_vault(lst);
     let cov_addr = deploy_coverage_token();
-    let cm_addr = deploy_claims_manager(vault_addr, cov_addr);
+    let cm_addr = deploy_claims_manager(vault_addr, cov_addr, 0x999.try_into().unwrap());
 
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
     cm.get_claim(999);
@@ -481,7 +547,7 @@ fn test_get_claim_status_nonexistent_returns_zero() {
     let lst = deploy_erc20(TOKEN_SUPPLY);
     let vault_addr = deploy_vault(lst);
     let cov_addr = deploy_coverage_token();
-    let cm_addr = deploy_claims_manager(vault_addr, cov_addr);
+    let cm_addr = deploy_claims_manager(vault_addr, cov_addr, 0x999.try_into().unwrap());
 
     let cm = IClaimsManagerDispatcher { contract_address: cm_addr };
     // Non-existent claim returns 0 (which happens to be STATUS_PENDING, but claimant is zero)

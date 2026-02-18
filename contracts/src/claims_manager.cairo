@@ -5,7 +5,7 @@
 // Handles the full insurance claim lifecycle:
 //   1. User submits a claim referencing their Coverage NFT
 //   2. Whitelisted governance wallets review off-chain
-//   3. Governor approves → vault pays out BTC-LST, NFT burned
+//   3. Governor approves → vault pays out BTC-LST, NFT burned, PM notified
 //      Governor rejects → claim marked rejected, NFT untouched
 //
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -78,6 +78,11 @@ pub mod ClaimsManager {
         fn is_active(self: @T, token_id: u256) -> bool;
     }
 
+    #[starknet::interface]
+    trait IPremiumModuleExt<T> {
+        fn notify_claim_payout(ref self: T, token_id: u256);
+    }
+
     // ── Storage node for claims ──
     #[starknet::storage_node]
     struct ClaimNode {
@@ -108,6 +113,7 @@ pub mod ClaimsManager {
         src5: SRC5Component::Storage,
         vault: ContractAddress,
         coverage_token: ContractAddress,
+        premium_module: ContractAddress,
         claims: Map<u256, ClaimNode>,
         next_claim_id: u256,
         token_claimed: Map<u256, bool>,
@@ -157,6 +163,7 @@ pub mod ClaimsManager {
         ref self: ContractState,
         vault: ContractAddress,
         coverage_token: ContractAddress,
+        premium_module: ContractAddress,
         owner: ContractAddress,
     ) {
         assert(vault.is_non_zero(), 'Invalid vault');
@@ -172,6 +179,7 @@ pub mod ClaimsManager {
 
         self.vault.write(vault);
         self.coverage_token.write(coverage_token);
+        self.premium_module.write(premium_module);
         self.next_claim_id.write(1);
     }
 
@@ -222,7 +230,7 @@ pub mod ClaimsManager {
             claim_id
         }
 
-        /// Governor approves a claim → vault pays BTC-LST to user, NFT burned.
+        /// Governor approves a claim → vault pays BTC-LST to user, NFT burned, PM notified.
         fn approve_claim(ref self: ContractState, claim_id: u256) {
             self.access_control.assert_only_role(GOVERNOR_ROLE);
 
@@ -249,6 +257,13 @@ pub mod ClaimsManager {
                 contract_address: self.coverage_token.read(),
             };
             cov.burn_coverage(token_id);
+
+            // Notify premium module to clean up coverage state
+            let pm_addr = self.premium_module.read();
+            if pm_addr.is_non_zero() {
+                let pm = IPremiumModuleExtDispatcher { contract_address: pm_addr };
+                pm.notify_claim_payout(token_id);
+            }
 
             self.emit(ClaimApproved { claim_id, claimant, payout_amount: coverage_amount });
         }

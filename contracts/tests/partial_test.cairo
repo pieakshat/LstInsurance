@@ -205,23 +205,19 @@ fn test_full_insurance_flow() {
     assert(vault_shares.balance_of(LP2()) == lp2_shares, 'LP2 share bal');
 
     // ─────────────────────────────────────────────
-    // Phase 2b: LPs lock liquidity for underwriting
-    //           (required to earn premiums & back coverage)
+    // Phase 2b: Grant coverage manager role to PM
+    //           so buy_coverage can lock vault capital
     // ─────────────────────────────────────────────
 
     let vault_lock = ILstVaultDispatcher { contract_address: vault_addr };
 
-    start_cheat_caller_address(vault_addr, LP1());
-    vault_lock.lock_liquidity(lp1_deposit, NINETY_DAYS);
-    stop_cheat_caller_address(vault_addr);
-
-    start_cheat_caller_address(vault_addr, LP2());
-    vault_lock.lock_liquidity(lp2_deposit, NINETY_DAYS);
+    start_cheat_caller_address(vault_addr, OWNER());
+    vault_lock.set_coverage_manager(pm_addr);
     stop_cheat_caller_address(vault_addr);
 
     // ─────────────────────────────────────────────
-    // Phase 3: LPs checkpoint their locked liquidity
-    //          (records their locked amount for premium distribution)
+    // Phase 3: LPs checkpoint their vault shares
+    //          (records share balance for premium distribution)
     // ─────────────────────────────────────────────
 
     start_cheat_caller_address(pm_addr, LP1());
@@ -297,7 +293,7 @@ fn test_full_insurance_flow() {
 
     assert(lp1_claimable > 0, 'LP1 earned premiums');
     assert(lp2_claimable > 0, 'LP2 earned premiums');
-    // LP1 locked 500 LST vs LP2's 300 LST → LP1 gets larger share
+    // LP1 deposited 500 LST vs LP2's 300 LST → LP1 gets larger share
     assert(lp1_claimable > lp2_claimable, 'LP1 gets more (500 > 300)');
 
     // LP1 claims

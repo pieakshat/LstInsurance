@@ -7,7 +7,7 @@
 Build a DeFi insurance infrastructure on Starknet where:
 	•	Liquidity providers deposit BTC-LST into protocol-specific ERC-4626 vaults.
 	•	Each vault underwrites risk for a single partner protocol.
-	•	LP liquidity is time-locked to back active coverage.
+	•	Vault capital is automatically locked when coverage is sold and unlocked when it expires or is claimed.
 	•	Users pay one-time premiums for insurance.
 	•	Premiums flow only to LPs underwriting that protocol.
 	•	In the event of a hack, insured users claim payouts via Merkle proofs from the relevant vault.
@@ -32,9 +32,9 @@ Deposit BTC-LST into protocol vaults.
 
 Earn:
 	•	Native BTC-LST yield
-	•	Protocol insurance premiums
+	•	Protocol insurance premiums (proportional to vault shares)
 
-Must lock liquidity for underwriting.
+All deposited capital automatically backs coverage — no manual locking required.
 
 ⸻
 
@@ -89,32 +89,33 @@ Solvency pool backing a single protocol.
 Functions
 	•	deposit()
 	•	withdraw()
-	•	lockLiquidity(amount, duration)
-	•	unlockLiquidity()
+	•	set_coverage_manager(manager)
+	•	lock_for_coverage(amount) — called by Premium Module
+	•	unlock_from_coverage(amount) — called by Premium Module
 	•	withdraw_for_payout()
 	•	totalAssets()
 
 Notes
 	•	Holds BTC-LST only.
 	•	Yield accrues via LST appreciation.
-	•	Liquidity locked while underwriting.
-	•	Only locked liquidity backs coverage.
+	•	Capital is locked automatically when coverage is sold (demand-driven).
+	•	All deposited capital can back coverage — no manual LP locking step.
 
 ⸻
 
-4.3 LP Liquidity Locking
+4.3 Demand-Based Capital Locking
 
-LPs must lock liquidity to underwrite risk.
+Capital is locked automatically by the Premium Module when coverage is purchased, and unlocked when coverage expires or is claimed. LPs do not manually lock.
 
-Lock Parameters
-	•	Amount
-	•	Lock duration
-	•	Protocol vault
+Lock Lifecycle
+	•	buy_coverage() → Premium Module calls vault.lock_for_coverage(coverage_amount)
+	•	expire_coverage() → Premium Module calls vault.unlock_from_coverage(amount)
+	•	approve_claim() → Claims Manager pays out (vault reduces locked_liquidity), then notifies Premium Module
 
 Rules
-	•	Locked funds cannot be withdrawn.
-	•	Premium rewards accrue only while locked.
-	•	Unlock → premium entitlement stops.
+	•	Locked capital cannot be withdrawn by LPs.
+	•	Premium rewards accrue to all depositors proportional to vault shares.
+	•	LPs can withdraw any unlocked portion at any time.
 
 ⸻
 
@@ -125,7 +126,7 @@ Treasury holding premiums for each protocol.
 Functions
 	•	Receive premium payments
 	•	Track accrual
-	•	Distribute rewards to locked LPs
+	•	Distribute rewards to LPs proportional to vault shares
 
 Optional: Can be merged into vault accounting.
 
@@ -180,7 +181,7 @@ Flow
 	3.	Pays premium.
 	4.	Coverage token minted.
 	5.	Premium routed to protocol premium vault.
-	6.	Liquidity locked in solvency vault.
+	6.	Premium Module calls vault.lock_for_coverage(coverage_amount) — capital locked automatically.
 
 ⸻
 
@@ -259,11 +260,11 @@ Flow
 
 ⸻
 
-5.2 LP Deposit & Lock Flow
+5.2 LP Deposit Flow
 	1.	LP deposits BTC-LST.
 	2.	Shares minted.
-	3.	LP locks liquidity.
-	4.	Lock backs active coverage.
+	3.	LP checkpoints in premium module (once per epoch to earn premiums).
+	4.	Deposited capital automatically backs future coverage purchases.
 
 ⸻
 
@@ -283,9 +284,9 @@ Premiums distributed per vault:
 
 reward =
   protocol_premiums
-* (lp_locked / total_locked)
+* (lp_shares / total_vault_shares)
 
-Unlocked liquidity earns nothing.
+All depositors earn premiums proportional to their vault share balance.
 
 ⸻
 
@@ -300,16 +301,6 @@ Unlocked liquidity earns nothing.
 ⸻
 
 6. Data Structures
-
-⸻
-
-LP Lock
-
-struct Lock {
-  amount
-  unlock_time
-}
-
 
 ⸻
 
@@ -340,7 +331,7 @@ struct Incident {
 
 7. Risk Controls
 	•	Coverage caps per vault.
-	•	Liquidity lock enforcement.
+	•	Demand-based capital locking (automatic lock/unlock tied to coverage lifecycle).
 	•	Coverage expiry enforcement.
 	•	Double-claim prevention.
 	•	Vault deposit caps.
@@ -355,9 +346,9 @@ struct Incident {
 
 LP Yield Sources
 	•	BTC-LST native yield.
-	•	Insurance premiums.
+	•	Insurance premiums (proportional to vault shares).
 
-Only while liquidity locked.
+All depositors earn premiums — no manual locking required.
 
 ⸻
 
@@ -391,8 +382,8 @@ Share price decreases after payouts.
 ┌───────────────────┐          reads params ─────────┘          │
 │                   │          & checks active                  │
 │   LST Vault       │◀─────────────────────────────────────────┘
-│   (ERC-4626)      │    reads LP share balances                │
-│                   │    for checkpoint & epoch snapshot         │
+│   (ERC-4626)      │    lock/unlock capital for coverage       │
+│                   │    reads shares for premium distribution  │
 └───────┬───────────┘                                           │
         │                                                       │ mints
         │ holds BTC-LST                                         ▼
@@ -409,62 +400,65 @@ Share price decreases after payouts.
 ### 9.2 LP Deposit & Underwriting Flow
 
 ```
-    LP                    BTC-LST Token         LST Vault
-    │                          │                    │
-    │  1. approve(vault, amt)  │                    │
-    │─────────────────────────▶│                    │
-    │                          │                    │
-    │  2. deposit(assets, LP)  │                    │
-    │──────────────────────────┼───────────────────▶│
-    │                          │                    │
-    │                          │  3. transferFrom   │
-    │                          │◀───────────────────│
-    │                          │    (LP → vault)    │
-    │                          │                    │
-    │  4. vault shares minted  │                    │
-    │◀─────────────────────────┼────────────────────│
-    │                          │                    │
-    │  5. lock_liquidity(amt, duration)             │
-    │──────────────────────────┼───────────────────▶│
-    │                          │                    │
-    │  6. LiquidityLocked event│                    │
-    │◀─────────────────────────┼────────────────────│
-    │                          │                    │
-    │                     LP is now underwriting     │
-    │                     and earning premiums       │
+    LP                    BTC-LST Token         LST Vault         Premium Module
+    │                          │                    │                    │
+    │  1. approve(vault, amt)  │                    │                    │
+    │─────────────────────────▶│                    │                    │
+    │                          │                    │                    │
+    │  2. deposit(assets, LP)  │                    │                    │
+    │──────────────────────────┼───────────────────▶│                    │
+    │                          │                    │                    │
+    │                          │  3. transferFrom   │                    │
+    │                          │◀───────────────────│                    │
+    │                          │    (LP → vault)    │                    │
+    │                          │                    │                    │
+    │  4. vault shares minted  │                    │                    │
+    │◀─────────────────────────┼────────────────────│                    │
+    │                          │                    │                    │
+    │  5. checkpoint()         │                    │                    │
+    │──────────────────────────┼────────────────────┼───────────────────▶│
+    │                          │                    │                    │
+    │  6. LPCheckpointed event │                    │                    │
+    │◀─────────────────────────┼────────────────────┼────────────────────│
+    │                          │                    │                    │
+    │        LP is now underwriting and earning premiums                 │
+    │        (capital auto-locked when coverage is purchased)            │
 ```
 
 ### 9.3 Coverage Purchase Flow
 
 ```
-    User              Premium Token       Premium Module    Coverage Token     Registry
-     │                  (USDC)                 │                 │               │
-     │                                         │  1. is_active?  │               │
-     │  buy_coverage(amount, duration)         │────────────────┼──────────────▶│
-     │────────────────────────────────────────▶│                │               │
-     │                                         │  2. get params │               │
-     │                                         │────────────────┼──────────────▶│
-     │                                         │◀───────────────┼───────────────│
-     │                                         │  (premium_rate,│coverage_cap)  │
-     │                                         │                │               │
-     │                                         │ 3. compute     │               │
-     │                                         │    premium     │               │
-     │                                         │                │               │
-     │                  4. transferFrom         │                │               │
-     │                  (user → PM, premium)    │                │               │
-     │                 ─────────────────────────│                │               │
-     │                                         │                │               │
-     │                                         │ 5. mint_coverage               │
-     │                                         │───────────────▶│               │
-     │                                         │                │               │
-     │            6. Coverage NFT minted        │                │               │
-     │◀─────────────────────────────────────────┼────────────────│               │
-     │                                         │                │               │
-     │        NFT contains:                    │                │               │
-     │        - protocol_id                    │                │               │
-     │        - coverage_amount                │                │               │
-     │        - start_time / end_time          │                │               │
-     │        - premium_paid                   │                │               │
+    User              Premium Token       Premium Module    Coverage Token     Registry       Vault
+     │                  (USDC)                 │                 │               │              │
+     │                                         │  1. is_active?  │               │              │
+     │  buy_coverage(amount, duration)         │────────────────┼──────────────▶│              │
+     │────────────────────────────────────────▶│                │               │              │
+     │                                         │  2. get params │               │              │
+     │                                         │────────────────┼──────────────▶│              │
+     │                                         │◀───────────────┼───────────────│              │
+     │                                         │  (premium_rate,│coverage_cap)  │              │
+     │                                         │                │               │              │
+     │                                         │ 3. compute     │               │              │
+     │                                         │    premium     │               │              │
+     │                                         │                │               │              │
+     │                  4. transferFrom         │                │               │              │
+     │                  (user → PM, premium)    │                │               │              │
+     │                 ─────────────────────────│                │               │              │
+     │                                         │                │               │              │
+     │                                         │ 5. mint_coverage               │              │
+     │                                         │───────────────▶│               │              │
+     │                                         │                │               │              │
+     │                                         │ 6. lock_for_coverage(amount)   │              │
+     │                                         │────────────────┼───────────────┼─────────────▶│
+     │                                         │                │               │              │
+     │            7. Coverage NFT minted        │                │               │              │
+     │◀─────────────────────────────────────────┼────────────────│               │              │
+     │                                         │                │               │              │
+     │        NFT contains:                    │                │               │              │
+     │        - protocol_id                    │     Vault capital now locked    │              │
+     │        - coverage_amount                │     for this coverage amount    │              │
+     │        - start_time / end_time          │                │               │              │
+     │        - premium_paid                   │                │               │              │
 ```
 
 ### 9.4 Epoch Lifecycle & Premium Distribution
@@ -572,34 +566,33 @@ Share price decreases after payouts.
          │                 BTC-LST                 │
          │                 into vault              │
          │                   │                     │
-         │              4. lock                    │
-         │                 liquidity               │
-         │                   │                     │
-         │              5. checkpoint              │
+         │              4. checkpoint              │
          │                 in premium              │
          │                 module                  │
          │                   │                     │
-         │                   │                6. buy coverage
+         │                   │                5. buy coverage
          │                   │                   pay premium
          │                   │                   receive NFT
+         │                   │                   (vault capital
+         │                   │                    auto-locked)
          │                   │                     │
-    7. advance               │                     │
+    6. advance               │                     │
        epoch                 │                     │
          │                   │                     │
-         │              8. claim                   │
+         │              7. claim                   │
          │                 premiums                │
          │                 (USDC)                  │
          │                   │                     │
          │                   │                     │
     ─ ─ ─ ─ ─ ─ ─ ─ IF HACK OCCURS ─ ─ ─ ─ ─ ─ ─
          │                   │                     │
-    9. approve               │                     │
+    8. approve               │                     │
        incident              │                     │
          │                   │                     │
-   10. submit                │                     │
+    9. submit                │                     │
        merkle root           │                     │
          │                   │                     │
-         │                   │               11. claim payout
+         │                   │               10. claim payout
          │                   │                   via merkle
          │                   │                   proof
          │                   │                     │

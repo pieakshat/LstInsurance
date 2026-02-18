@@ -1,6 +1,6 @@
 use snforge_std::{
     declare, ContractClassTrait, DeclareResultTrait, start_cheat_caller_address,
-    stop_cheat_caller_address, start_cheat_block_timestamp_global,
+    stop_cheat_caller_address,
 };
 use starknet::ContractAddress;
 use core::num::traits::Zero;
@@ -44,6 +44,10 @@ fn PROTOCOL_ADDR() -> ContractAddress {
 
 fn CLAIMS_MANAGER() -> ContractAddress {
     0x200.try_into().unwrap()
+}
+
+fn COVERAGE_MANAGER() -> ContractAddress {
+    0x300.try_into().unwrap()
 }
 
 const INITIAL_SUPPLY: u256 = 1_000_000_000_000_000_000_000; // 1000e18
@@ -276,70 +280,103 @@ fn test_vault_deposit_exceeds_limit() {
     vault_erc4626.deposit(DEPOSIT_AMOUNT, USER1());
 }
 
+// ═══════════════════════════════════════════════
+// COVERAGE LOCK TESTS
+// ═══════════════════════════════════════════════
+
 #[test]
-fn test_vault_lock_liquidity() {
+fn test_lock_for_coverage() {
     let (_asset_addr, vault_addr) = setup_vault();
 
     let vault = ILstVaultDispatcher { contract_address: vault_addr };
     let vault_erc4626 = ITestERC4626Dispatcher { contract_address: vault_addr };
 
+    // Deposit
     start_cheat_caller_address(vault_addr, USER1());
     vault_erc4626.deposit(DEPOSIT_AMOUNT, USER1());
+    stop_cheat_caller_address(vault_addr);
 
+    // Set coverage manager
+    start_cheat_caller_address(vault_addr, OWNER());
+    vault.set_coverage_manager(COVERAGE_MANAGER());
+    stop_cheat_caller_address(vault_addr);
+
+    // Coverage manager locks capital
     let lock_amount = DEPOSIT_AMOUNT / 2;
-    vault.lock_liquidity(lock_amount, 86400);
+    start_cheat_caller_address(vault_addr, COVERAGE_MANAGER());
+    vault.lock_for_coverage(lock_amount);
     stop_cheat_caller_address(vault_addr);
 
-    assert(vault.locked_balance(USER1()) == lock_amount, 'Locked balance wrong');
-    assert(vault.total_locked_liquidity() == lock_amount, 'Total locked wrong');
+    assert(vault.total_locked_liquidity() == lock_amount, 'Locked liquidity wrong');
+    assert(vault.available_liquidity() == DEPOSIT_AMOUNT - lock_amount, 'Available wrong');
 }
 
 #[test]
-fn test_vault_unlock_after_expiry() {
+fn test_unlock_from_coverage() {
     let (_asset_addr, vault_addr) = setup_vault();
 
     let vault = ILstVaultDispatcher { contract_address: vault_addr };
     let vault_erc4626 = ITestERC4626Dispatcher { contract_address: vault_addr };
 
-    start_cheat_block_timestamp_global(1000);
-
     start_cheat_caller_address(vault_addr, USER1());
     vault_erc4626.deposit(DEPOSIT_AMOUNT, USER1());
-    vault.lock_liquidity(DEPOSIT_AMOUNT / 2, 86400);
     stop_cheat_caller_address(vault_addr);
 
-    // Advance past lock expiry
-    start_cheat_block_timestamp_global(1000 + 86400 + 1);
-
-    start_cheat_caller_address(vault_addr, USER1());
-    vault.unlock_liquidity(0);
+    start_cheat_caller_address(vault_addr, OWNER());
+    vault.set_coverage_manager(COVERAGE_MANAGER());
     stop_cheat_caller_address(vault_addr);
 
-    assert(vault.locked_balance(USER1()) == 0, 'Should be unlocked');
-    assert(vault.total_locked_liquidity() == 0, 'Total locked should be 0');
+    // Lock then unlock
+    start_cheat_caller_address(vault_addr, COVERAGE_MANAGER());
+    vault.lock_for_coverage(DEPOSIT_AMOUNT / 2);
+    vault.unlock_from_coverage(DEPOSIT_AMOUNT / 2);
+    stop_cheat_caller_address(vault_addr);
+
+    assert(vault.total_locked_liquidity() == 0, 'Should be unlocked');
+    assert(vault.available_liquidity() == DEPOSIT_AMOUNT, 'All available');
 }
 
 #[test]
-#[should_panic(expected: 'Lock not expired')]
-fn test_vault_unlock_before_expiry_fails() {
+#[should_panic(expected: 'Exceeds total assets')]
+fn test_lock_exceeds_assets_fails() {
     let (_asset_addr, vault_addr) = setup_vault();
 
     let vault = ILstVaultDispatcher { contract_address: vault_addr };
     let vault_erc4626 = ITestERC4626Dispatcher { contract_address: vault_addr };
 
-    start_cheat_block_timestamp_global(1000);
+    start_cheat_caller_address(vault_addr, USER1());
+    vault_erc4626.deposit(DEPOSIT_AMOUNT, USER1());
+    stop_cheat_caller_address(vault_addr);
+
+    start_cheat_caller_address(vault_addr, OWNER());
+    vault.set_coverage_manager(COVERAGE_MANAGER());
+    stop_cheat_caller_address(vault_addr);
+
+    // Try to lock more than total assets
+    start_cheat_caller_address(vault_addr, COVERAGE_MANAGER());
+    vault.lock_for_coverage(DEPOSIT_AMOUNT + 1);
+}
+
+#[test]
+#[should_panic]
+fn test_lock_non_coverage_manager_fails() {
+    let (_asset_addr, vault_addr) = setup_vault();
+
+    let vault = ILstVaultDispatcher { contract_address: vault_addr };
+    let vault_erc4626 = ITestERC4626Dispatcher { contract_address: vault_addr };
 
     start_cheat_caller_address(vault_addr, USER1());
     vault_erc4626.deposit(DEPOSIT_AMOUNT, USER1());
-    vault.lock_liquidity(DEPOSIT_AMOUNT / 2, 86400);
+    stop_cheat_caller_address(vault_addr);
 
-    // Unlock immediately — should fail
-    vault.unlock_liquidity(0);
+    // Random caller tries to lock — should fail
+    start_cheat_caller_address(vault_addr, USER1());
+    vault.lock_for_coverage(DEPOSIT_AMOUNT / 2);
 }
 
 #[test]
 #[should_panic(expected: 'ERC4626: exceeds max withdraw')]
-fn test_vault_withdraw_blocked_by_lock() {
+fn test_withdraw_blocked_by_coverage_lock() {
     let (_asset_addr, vault_addr) = setup_vault();
 
     let vault = ILstVaultDispatcher { contract_address: vault_addr };
@@ -347,10 +384,90 @@ fn test_vault_withdraw_blocked_by_lock() {
 
     start_cheat_caller_address(vault_addr, USER1());
     vault_erc4626.deposit(DEPOSIT_AMOUNT, USER1());
-    vault.lock_liquidity(DEPOSIT_AMOUNT, 86400);
+    stop_cheat_caller_address(vault_addr);
 
-    // Withdraw full amount while locked — should fail
+    start_cheat_caller_address(vault_addr, OWNER());
+    vault.set_coverage_manager(COVERAGE_MANAGER());
+    stop_cheat_caller_address(vault_addr);
+
+    // Lock all capital
+    start_cheat_caller_address(vault_addr, COVERAGE_MANAGER());
+    vault.lock_for_coverage(DEPOSIT_AMOUNT);
+    stop_cheat_caller_address(vault_addr);
+
+    // Try to withdraw full amount — should fail
+    start_cheat_caller_address(vault_addr, USER1());
     vault_erc4626.withdraw(DEPOSIT_AMOUNT, USER1(), USER1());
+}
+
+#[test]
+fn test_withdraw_partial_with_coverage_lock() {
+    let (asset_addr, vault_addr) = setup_vault();
+
+    let vault = ILstVaultDispatcher { contract_address: vault_addr };
+    let vault_erc4626 = ITestERC4626Dispatcher { contract_address: vault_addr };
+    let asset = ERC20ABIDispatcher { contract_address: asset_addr };
+
+    start_cheat_caller_address(vault_addr, USER1());
+    vault_erc4626.deposit(DEPOSIT_AMOUNT, USER1());
+    stop_cheat_caller_address(vault_addr);
+
+    start_cheat_caller_address(vault_addr, OWNER());
+    vault.set_coverage_manager(COVERAGE_MANAGER());
+    stop_cheat_caller_address(vault_addr);
+
+    // Lock 60e18
+    let lock_amount: u256 = 60_000_000_000_000_000_000;
+    start_cheat_caller_address(vault_addr, COVERAGE_MANAGER());
+    vault.lock_for_coverage(lock_amount);
+    stop_cheat_caller_address(vault_addr);
+
+    // Withdraw 40e18 (100 - 60 = 40 available) — should succeed
+    let withdraw_amount: u256 = 40_000_000_000_000_000_000;
+    let bal_before = asset.balance_of(USER1());
+    start_cheat_caller_address(vault_addr, USER1());
+    vault_erc4626.withdraw(withdraw_amount, USER1(), USER1());
+    stop_cheat_caller_address(vault_addr);
+
+    assert(asset.balance_of(USER1()) == bal_before + withdraw_amount, 'Partial withdraw works');
+}
+
+#[test]
+fn test_payout_reduces_locked() {
+    let (asset_addr, vault_addr) = setup_vault();
+
+    let vault = ILstVaultDispatcher { contract_address: vault_addr };
+    let vault_erc4626 = ITestERC4626Dispatcher { contract_address: vault_addr };
+    let asset = ERC20ABIDispatcher { contract_address: asset_addr };
+
+    // Deposit
+    start_cheat_caller_address(vault_addr, USER1());
+    vault_erc4626.deposit(DEPOSIT_AMOUNT, USER1());
+    stop_cheat_caller_address(vault_addr);
+
+    // Set claims manager and coverage manager
+    start_cheat_caller_address(vault_addr, OWNER());
+    vault.set_claims_manager(CLAIMS_MANAGER());
+    vault.set_coverage_manager(COVERAGE_MANAGER());
+    stop_cheat_caller_address(vault_addr);
+
+    // Lock 100e18 via coverage
+    start_cheat_caller_address(vault_addr, COVERAGE_MANAGER());
+    vault.lock_for_coverage(DEPOSIT_AMOUNT);
+    stop_cheat_caller_address(vault_addr);
+
+    assert(vault.total_locked_liquidity() == DEPOSIT_AMOUNT, 'Locked = 100');
+
+    // Payout 30e18
+    let payout: u256 = 30_000_000_000_000_000_000;
+    start_cheat_caller_address(vault_addr, CLAIMS_MANAGER());
+    vault.withdraw_for_payout(USER2(), payout);
+    stop_cheat_caller_address(vault_addr);
+
+    // Verify locked reduced
+    assert(vault.total_locked_liquidity() == DEPOSIT_AMOUNT - payout, 'Locked = 70');
+    assert(asset.balance_of(USER2()) == payout, 'Payout received');
+    assert(vault.total_payouts() == payout, 'Payout tracking');
 }
 
 #[test]
@@ -366,14 +483,15 @@ fn test_vault_claims_manager_payout() {
     vault_erc4626.deposit(DEPOSIT_AMOUNT, USER1());
     stop_cheat_caller_address(vault_addr);
 
-    // Set claims manager
+    // Set claims manager and coverage manager
     start_cheat_caller_address(vault_addr, OWNER());
     vault.set_claims_manager(CLAIMS_MANAGER());
+    vault.set_coverage_manager(COVERAGE_MANAGER());
     stop_cheat_caller_address(vault_addr);
 
-    // Lock some liquidity (payout is against locked liquidity)
-    start_cheat_caller_address(vault_addr, USER1());
-    vault.lock_liquidity(DEPOSIT_AMOUNT / 2, 86400);
+    // Lock via coverage manager
+    start_cheat_caller_address(vault_addr, COVERAGE_MANAGER());
+    vault.lock_for_coverage(DEPOSIT_AMOUNT / 2);
     stop_cheat_caller_address(vault_addr);
 
     // Claims manager sends payout
@@ -384,11 +502,7 @@ fn test_vault_claims_manager_payout() {
 
     assert(asset.balance_of(USER2()) == payout, 'Payout not received');
     assert(vault.total_payouts() == payout, 'Payout tracking wrong');
-
-    // After payout: locked_liquidity = 25e18, total_raw_locked = 50e18
-    // LP's effective locked = 50 * 25 / 50 = 25e18 (diluted from 50)
-    assert(vault.total_locked_liquidity() == DEPOSIT_AMOUNT / 4, 'Locked should be diluted');
-    assert(vault.locked_balance(USER1()) == DEPOSIT_AMOUNT / 4, 'LP lock diluted by payout');
+    assert(vault.total_locked_liquidity() == DEPOSIT_AMOUNT / 4, 'Locked should be reduced');
 }
 
 #[test]
@@ -424,9 +538,13 @@ fn test_vault_available_liquidity() {
 
     assert(vault.available_liquidity() == DEPOSIT_AMOUNT, 'All liquidity available');
 
-    // Lock half
-    start_cheat_caller_address(vault_addr, USER1());
-    vault.lock_liquidity(DEPOSIT_AMOUNT / 2, 86400);
+    // Lock half via coverage manager
+    start_cheat_caller_address(vault_addr, OWNER());
+    vault.set_coverage_manager(COVERAGE_MANAGER());
+    stop_cheat_caller_address(vault_addr);
+
+    start_cheat_caller_address(vault_addr, COVERAGE_MANAGER());
+    vault.lock_for_coverage(DEPOSIT_AMOUNT / 2);
     stop_cheat_caller_address(vault_addr);
 
     assert(vault.available_liquidity() == DEPOSIT_AMOUNT / 2, 'Half available');
@@ -441,80 +559,20 @@ fn test_vault_solvency_views() {
 
     start_cheat_caller_address(vault_addr, USER1());
     vault_erc4626.deposit(DEPOSIT_AMOUNT, USER1());
-    vault.lock_liquidity(DEPOSIT_AMOUNT / 2, 86400);
+    stop_cheat_caller_address(vault_addr);
+
+    start_cheat_caller_address(vault_addr, OWNER());
+    vault.set_coverage_manager(COVERAGE_MANAGER());
+    stop_cheat_caller_address(vault_addr);
+
+    start_cheat_caller_address(vault_addr, COVERAGE_MANAGER());
+    vault.lock_for_coverage(DEPOSIT_AMOUNT / 2);
     stop_cheat_caller_address(vault_addr);
 
     assert(vault.solvency_assets() == DEPOSIT_AMOUNT, 'Solvency assets wrong');
     assert(vault.solvency_locked() == DEPOSIT_AMOUNT / 2, 'Solvency locked wrong');
-    // coverage_capacity = locked * leverage
-    assert(vault.coverage_capacity(2) == DEPOSIT_AMOUNT, 'Coverage capacity wrong');
-}
-
-#[test]
-fn test_payout_dilutes_lp_locks() {
-    let (asset_addr, vault_addr) = setup_vault();
-
-    let vault = ILstVaultDispatcher { contract_address: vault_addr };
-    let vault_erc4626 = ITestERC4626Dispatcher { contract_address: vault_addr };
-    let asset = ERC20ABIDispatcher { contract_address: asset_addr };
-
-    start_cheat_block_timestamp_global(1000);
-
-    // Fund USER2 as well
-    start_cheat_caller_address(asset_addr, OWNER());
-    asset.transfer(USER2(), DEPOSIT_AMOUNT * 2);
-    stop_cheat_caller_address(asset_addr);
-
-    start_cheat_caller_address(asset_addr, USER2());
-    asset.approve(vault_addr, DEPOSIT_AMOUNT * 2);
-    stop_cheat_caller_address(asset_addr);
-
-    // USER1 deposits 100e18, locks 60e18 for 1 day
-    start_cheat_caller_address(vault_addr, USER1());
-    vault_erc4626.deposit(DEPOSIT_AMOUNT, USER1());
-    vault.lock_liquidity(60_000_000_000_000_000_000, 86400); // 60e18, 1 day
-    stop_cheat_caller_address(vault_addr);
-
-    // USER2 deposits 100e18, locks 40e18 for 2 days (longer lock)
-    start_cheat_caller_address(vault_addr, USER2());
-    vault_erc4626.deposit(DEPOSIT_AMOUNT, USER2());
-    vault.lock_liquidity(40_000_000_000_000_000_000, 172800); // 40e18, 2 days
-    stop_cheat_caller_address(vault_addr);
-
-    // Total locked = 100e18, total_raw_locked = 100e18
-    assert(vault.total_locked_liquidity() == DEPOSIT_AMOUNT, 'Total locked = 100');
-    assert(vault.locked_balance(USER1()) == 60_000_000_000_000_000_000, 'USER1 locked = 60');
-    assert(vault.locked_balance(USER2()) == 40_000_000_000_000_000_000, 'USER2 locked = 40');
-
-    // Set claims manager and do a 20e18 payout
-    start_cheat_caller_address(vault_addr, OWNER());
-    vault.set_claims_manager(CLAIMS_MANAGER());
-    stop_cheat_caller_address(vault_addr);
-
-    let payout: u256 = 20_000_000_000_000_000_000; // 20e18
-    start_cheat_caller_address(vault_addr, CLAIMS_MANAGER());
-    vault.withdraw_for_payout(0x999.try_into().unwrap(), payout);
-    stop_cheat_caller_address(vault_addr);
-
-    // After payout: locked_liquidity = 80e18, total_raw_locked = 100e18
-    // USER1 effective = 60 * 80 / 100 = 48e18
-    // USER2 effective = 40 * 80 / 100 = 32e18
-    assert(vault.total_locked_liquidity() == 80_000_000_000_000_000_000, 'Total locked = 80');
-    assert(vault.locked_balance(USER1()) == 48_000_000_000_000_000_000, 'USER1 diluted to 48');
-    assert(vault.locked_balance(USER2()) == 32_000_000_000_000_000_000, 'USER2 diluted to 32');
-
-    // Advance past USER1's lock (1000+86400=87400) but NOT USER2's (1000+172800=173800)
-    start_cheat_block_timestamp_global(87401);
-
-    start_cheat_caller_address(vault_addr, USER1());
-    vault.unlock_liquidity(0);
-    stop_cheat_caller_address(vault_addr);
-
-    // After USER1 unlock: locked_liquidity = 80 - 48 = 32, total_raw = 100 - 60 = 40
-    // USER2 effective = 40 * 32 / 40 = 32e18 (unchanged, correct)
-    assert(vault.total_locked_liquidity() == 32_000_000_000_000_000_000, 'After unlock total = 32');
-    assert(vault.locked_balance(USER1()) == 0, 'USER1 fully unlocked');
-    assert(vault.locked_balance(USER2()) == 32_000_000_000_000_000_000, 'USER2 still 32');
+    // coverage_capacity = total_assets * leverage (all deposits back coverage)
+    assert(vault.coverage_capacity(2) == DEPOSIT_AMOUNT * 2, 'Coverage capacity wrong');
 }
 
 // ═══════════════════════════════════════════════
