@@ -198,8 +198,8 @@ pub mod ProtocolRegistry {
 
         fn register_protocol(
             ref self: ContractState,
-            protocol_address: ContractAddress,
-            vault: ContractAddress,
+            protocol_address: ContractAddress, // address of the protocol vault that the insurance will cover 
+            vault: ContractAddress, // address of the lst vault
             coverage_cap: u256,
             premium_rate: u256,
         ) -> u256 {

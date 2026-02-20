@@ -69,7 +69,7 @@ pub mod PremiumModule {
     pub const GOVERNANCE_ROLE: felt252 = selector!("GOVERNANCE_ROLE");
 
     pub const RATE_DENOMINATOR: u256 = 10000;
-    pub const BASE_DURATION: u64 = 7776000; // 90 days in seconds
+    pub const BASE_DURATION: u64 = 7776000; // 90 days 
 
     component!(path: AccessControlComponent, storage: access_control, event: AccessControlEvent);
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
@@ -235,7 +235,7 @@ pub mod PremiumModule {
             let new_total = self.total_active_coverage.read() + coverage_amount;
             assert(new_total <= protocol.coverage_cap, 'Exceeds coverage cap');
 
-            // Solvency check — vault must have enough available liquidity
+            // Solvency check
             let vault_disp = ILstVaultDispatcher { contract_address: self.vault.read() };
             assert(
                 vault_disp.available_liquidity() >= coverage_amount,
@@ -245,7 +245,7 @@ pub mod PremiumModule {
             let premium = compute_premium(coverage_amount, protocol.premium_rate, duration);
             assert(premium.is_non_zero(), 'Premium too small');
 
-            // Transfer premium from user to this contract
+            
             let asset = ERC20ABIDispatcher { contract_address: self.asset.read() };
             asset.transfer_from(caller, get_contract_address(), premium);
 

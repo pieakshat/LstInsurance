@@ -287,9 +287,10 @@ pub mod LstVault {
         }
     }
 
-    /// total_assets = vault's underlying token balance.
-    /// Payouts decrease balance → share price drops → LPs absorb the loss.
+
     impl VaultAssetsManagementImpl of ERC4626Component::AssetsManagementTrait<ContractState> {
+
+        // total underlying LST in the vault  
         fn get_total_assets(self: @ERC4626Component::ComponentState<ContractState>) -> u256 {
             let vault_address = starknet::get_contract_address();
             let asset_dispatcher = ERC20ABIDispatcher {
@@ -298,6 +299,7 @@ pub mod LstVault {
             asset_dispatcher.balance_of(vault_address)
         }
 
+        // get the LST inside the vault  
         fn transfer_assets_in(
             ref self: ERC4626Component::ComponentState<ContractState>,
             from: ContractAddress,
@@ -313,6 +315,7 @@ pub mod LstVault {
             );
         }
 
+        // transfer the lst shares out
         fn transfer_assets_out(
             ref self: ERC4626Component::ComponentState<ContractState>,
             to: ContractAddress,
@@ -446,6 +449,7 @@ pub mod LstVault {
         }
 
         /// Pulls BTC-LST from vault for a verified claim. Reduces locked liquidity.
+        /// need to add more restrictions on claimes manager 
         fn withdraw_for_payout(ref self: ContractState, to: ContractAddress, amount: u256) {
             self.access_control.assert_only_role(CLAIMS_MANAGER_ROLE);
             assert(amount.is_non_zero(), 'Amount cannot be 0');
@@ -468,6 +472,11 @@ pub mod LstVault {
         }
 
         /// Coverage manager locks vault capital when coverage is purchased.
+        /// demand based model 
+        /// locked amount = coverage purchased 
+        /// note that the users will buy insurance for BTC lst only
+        /// price fluctuation of btc will not impact the payout
+        /// users will buy insurance to be covered by btc LST 
         fn lock_for_coverage(ref self: ContractState, amount: u256) {
             self.access_control.assert_only_role(COVERAGE_MANAGER_ROLE);
             assert(amount.is_non_zero(), 'Amount must be > 0');
