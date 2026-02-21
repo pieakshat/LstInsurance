@@ -6,8 +6,10 @@ import type { Protocol } from "@/lib/types";
 import { ProtocolCard } from "./protocol-card";
 import { YourCovers } from "./your-covers";
 import { YourClaims } from "./your-claims";
+import { YourPositions } from "./your-positions";
+import { GlobalStats } from "./global-stats";
 
-const TABS = ["Buy Cover", "Your Covers", "Your Claims"] as const;
+const TABS = ["Buy Cover", "Your Covers", "Your Claims", "Your Positions"] as const;
 
 export default function AppPage() {
   const { status } = useAccount();
@@ -36,6 +38,8 @@ export default function AppPage() {
 
   return (
     <div className="max-w-5xl mx-auto">
+      <GlobalStats />
+
       {/* Tabs */}
       <div className="flex gap-1 border-b border-neutral-800 mb-8">
         {TABS.map((tab) => (
@@ -117,6 +121,17 @@ export default function AppPage() {
             Track the status of claims you have filed.
           </p>
           <YourClaims />
+        </>
+      )}
+
+      {/* Your Positions */}
+      {activeTab === "Your Positions" && (
+        <>
+          <h2 className="text-2xl font-bold mb-2">Your Positions</h2>
+          <p className="text-neutral-400 mb-6">
+            Your liquidity positions across insurance vaults.
+          </p>
+          <YourPositions />
         </>
       )}
     </div>

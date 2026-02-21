@@ -24,6 +24,16 @@ export interface CoveragePosition {
   end_time: number; // unix seconds
 }
 
+export interface LPPosition {
+  protocol_id: number;
+  protocol_name: string;
+  logo_url: string;
+  vault_address: string;
+  shares: string; // wei
+  assets_value: string; // wei — current value of shares in BTC-LST
+  deposited_at: number; // unix seconds
+}
+
 export type ClaimStatus = "pending" | "approved" | "rejected";
 
 export interface Claim {

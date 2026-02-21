@@ -4,11 +4,13 @@ import { useState } from "react";
 import type { Protocol } from "@/lib/types";
 import { DURATION_OPTIONS } from "@/lib/constants";
 import { calculatePremium, formatDuration } from "@/lib/utils";
+import { useToast } from "../../toast";
 
 const MOCK_BTC_LST_PRICE_USD = 60_000;
 const MOCK_USDC_BALANCE = "12,500.00";
 
 export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
+  const { toast } = useToast();
   const [coverageAmount, setCoverageAmount] = useState("");
   const [duration, setDuration] = useState(DURATION_OPTIONS[2].value); // default 90 days
 
@@ -19,11 +21,12 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
 
   function handleBuy() {
     if (amountNum <= 0) {
-      alert("Please enter a coverage amount");
+      toast("Please enter a coverage amount", "error");
       return;
     }
-    alert(
-      `Mock: Buy ${coverageAmount} BTC-LST cover for ${formatDuration(duration)} — premium: ${premiumUsdc.toFixed(2)} USDC`
+    toast(
+      `Cover purchased: ${coverageAmount} BTC-LST for ${formatDuration(duration)} — premium: ${premiumUsdc.toFixed(2)} USDC`,
+      "success"
     );
   }
 
