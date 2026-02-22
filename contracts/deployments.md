@@ -1,0 +1,40 @@
+signer account: 
+0x02d6a1ea40e3cb95a061ff9b1923ba549499be08bf3e26b1b21366b6d83abdde
+
+
+LstVault class hash: 0x6267345c81110cf7707959a9ff8adc91d63965ed8ba55234dd78ec1c96e65e3
+
+premiumModuleClassHash: 
+ 0x7650862ea26aa86d519fa11eb1e3657e9485be161b71172f4a0650e86f22a1b
+
+claimsManager: 
+0x4b830daee7cec37e3c3ea1db53f999dd58f3f3eb779e2dc446683786e6b4dcf
+
+
+Vault factory, mock BTC-LST, protocol registry, coverage token
+
+Vault factory class hash: 0x4661d3bf0883817b7b6e55ab9806fa1ccaabb5d08f3d0abf5628e72b4401e00
+
+
+mockERC20 class hash: 
+0x149729072ed51b3a3fcf73671e7b54492c4aa89f96d68906afd6794ea565626
+
+protocolRegistry class hash: 
+0xa0f72536abce9cd219498db119c46b2636920bf03508f95d39216af29ad8da
+
+CoverageTokenClassHash: 
+0x6aededc2b55174462d21a10b09ab3bb329b4fa909372ba56c7c79944030037b
+
+
+
+
+
+Mock LST: 0x02b2392f405feba76ec54294f5920b29e055fc3bf18f480d229795d7f0e04a11
+
+protocol_registry: 
+0x07569427aef9c02a6735e163b031391b0d6fd75802cc79dacfa0ca8c6dff8042
+
+coverage_token: 0x0691854648653bbfe39097a2b939e0c9fdc722c274a1b17afd52581df76156d1
+
+factory_address:
+0x07bfa4cfd2aa95bcce182e720b7d6488aa083708584489b44513ff37bf182b6b

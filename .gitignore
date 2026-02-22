@@ -24,6 +24,7 @@ contracts/profile/
 # Docs (except README)
 *.md
 !README.md
+!deployments.md
 
 # OS
 .DS_Store
