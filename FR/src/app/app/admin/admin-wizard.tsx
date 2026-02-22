@@ -1,17 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import {
-  useAccount,
-  useSendTransaction,
-  useReadContract,
-  useTransactionReceipt,
-} from "@starknet-react/core";
+import { useState, useEffect } from "react";
+import { useAccount, useReadContract } from "@starknet-react/core";
 import type { Abi } from "starknet";
 import { useToast } from "../toast";
 import { REGISTRY_ABI } from "@/lib/abis/registry";
 import { FACTORY_ABI } from "@/lib/abis/factory";
-import { parseContractError } from "@/lib/errors";
+import { useTxStep } from "@/lib/hooks/use-tx-step";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -236,72 +231,6 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
       <span className={mono ? "font-mono text-neutral-200 text-xs" : "text-white"}>{value}</span>
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Hook: single transaction lifecycle
-// ---------------------------------------------------------------------------
-
-type TxStatus = "idle" | "pending" | "confirming" | "done" | "error";
-
-function useTxStep() {
-  const [txHash, setTxHash] = useState<string | undefined>();
-  const [status, setStatus] = useState<TxStatus>("idle");
-  const { toast } = useToast();
-
-  const {
-    sendAsync,
-    isPending,
-    error: sendError,
-  } = useSendTransaction({});
-
-  const { data: receipt } = useTransactionReceipt({
-    hash: txHash,
-    refetchInterval: 2000,
-    enabled: !!txHash && status === "confirming",
-  });
-
-  useEffect(() => {
-    if (sendError && status === "pending") {
-      setStatus("error");
-      toast(parseContractError(sendError), "error");
-    }
-  }, [sendError, status, toast]);
-
-  useEffect(() => {
-    if (!receipt || status !== "confirming") return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const execStatus = (receipt as any).execution_status as string | undefined;
-    if (execStatus === "SUCCEEDED") {
-      setStatus("done");
-      toast("Transaction confirmed", "success");
-    } else if (execStatus === "REVERTED") {
-      setStatus("error");
-      toast("Transaction reverted on-chain", "error");
-    }
-  }, [receipt, status, toast]);
-
-  const execute = useCallback(
-    async (calls: { contractAddress: string; entrypoint: string; calldata: string[] }[]) => {
-      setStatus("pending");
-      setTxHash(undefined);
-      try {
-        const result = await sendAsync(calls);
-        setTxHash(result.transaction_hash);
-        setStatus("confirming");
-      } catch {
-        setStatus("error");
-      }
-    },
-    [sendAsync],
-  );
-
-  const reset = useCallback(() => {
-    setStatus("idle");
-    setTxHash(undefined);
-  }, []);
-
-  return { execute, status, txHash, reset };
 }
 
 // ---------------------------------------------------------------------------

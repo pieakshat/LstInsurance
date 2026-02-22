@@ -1,18 +1,19 @@
 import { Contract, type Abi, type ProviderInterface } from "starknet";
 
 export const CONTRACTS = {
-  registry: "0x0",
-  factory: "0x0",
-  coverageToken: "0x0",
-  claimsManager: "0x0",
+  registry: "0x07569427aef9c02a6735e163b031391b0d6fd75802cc79dacfa0ca8c6dff8042",
+  factory: "0x07bfa4cfd2aa95bcce182e720b7d6488aa083708584489b44513ff37bf182b6b",
+  coverageToken: "0x0691854648653bbfe39097a2b939e0c9fdc722c274a1b17afd52581df76156d1",
+  claimsManager: "0x0", // not yet deployed
 } as const;
 
 // Per-protocol addresses (vault, premiumModule) come from Protocol type
 // (stored in MongoDB: protocol.vault_address, protocol.premium_module_address)
 
 export const TOKENS = {
-  usdc: "0x0",   // Sepolia USDC
-  btcLst: "0x0", // Sepolia BTC-LST
+  // MockERC20 deployed on Starknet Sepolia — used as both BTC-LST and premium payment token
+  btcLst: "0x02b2392f405feba76ec54294f5920b29e055fc3bf18f480d229795d7f0e04a11",
+  usdc: "0x0", // not used in current protocol design
 } as const;
 
 export function getContract(

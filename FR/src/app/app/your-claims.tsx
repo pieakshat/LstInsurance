@@ -6,38 +6,7 @@ import { formatWei } from "@/lib/utils";
 
 const now = Math.floor(Date.now() / 1000);
 
-const MOCK_CLAIMS: Claim[] = [
-  {
-    claim_id: 1,
-    token_id: 3,
-    protocol_name: "Nostra Finance",
-    logo_url: "https://app.nostra.finance/favicon.ico",
-    coverage_amount: "250000000000000000",
-    status: "approved",
-    submitted_at: now - 8 * 86400,
-    resolved_at: now - 5 * 86400,
-  },
-  {
-    claim_id: 2,
-    token_id: 1,
-    protocol_name: "Nostra Finance",
-    logo_url: "https://app.nostra.finance/favicon.ico",
-    coverage_amount: "500000000000000000",
-    status: "pending",
-    submitted_at: now - 2 * 86400,
-    resolved_at: null,
-  },
-  {
-    claim_id: 3,
-    token_id: 2,
-    protocol_name: "Ekubo Protocol",
-    logo_url: "https://ekubo.org/favicon.ico",
-    coverage_amount: "1000000000000000000",
-    status: "rejected",
-    submitted_at: now - 15 * 86400,
-    resolved_at: now - 12 * 86400,
-  },
-];
+const MOCK_CLAIMS: Claim[] = [];
 
 const STATUS_STYLES: Record<
   ClaimStatus,

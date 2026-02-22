@@ -1,0 +1,99 @@
+"use client";
+
+import { useAccount, useReadContract } from "@starknet-react/core";
+import type { Abi } from "starknet";
+import { useTxStep } from "./use-tx-step";
+import { PREMIUM_MODULE_ABI } from "../abis/premium-module";
+import { ERC20_ABI } from "../abis/erc20";
+import { TOKENS } from "../contracts";
+
+const U128_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFn;
+const SHIFT_128 = 128n;
+
+function u256Calldata(value: bigint): [string, string] {
+  return [String(value & U128_MASK), String(value >> SHIFT_128)];
+}
+
+/** Decode a starknet u256 return value (bigint, number, string, or {low,high}) to bigint. */
+function parseU256(raw: unknown): bigint {
+  if (typeof raw === "bigint") return raw;
+  if (typeof raw === "number") return BigInt(raw);
+  if (typeof raw === "string") return BigInt(raw);
+  if (typeof raw === "object" && raw !== null && "low" in raw && "high" in raw) {
+    const r = raw as { low: unknown; high: unknown };
+    return (BigInt(String(r.high)) << SHIFT_128) | BigInt(String(r.low));
+  }
+  return 0n;
+}
+
+export function useBuyCoverage({
+  premiumModuleAddress,
+  coverageAmountWei,
+  durationSecs,
+}: {
+  premiumModuleAddress: string;
+  coverageAmountWei: bigint;
+  durationSecs: number;
+}) {
+  const { address: accountAddress } = useAccount();
+  const txStep = useTxStep();
+
+  const enabled =
+    !!premiumModuleAddress &&
+    premiumModuleAddress !== "0x0" &&
+    coverageAmountWei > 0n &&
+    durationSecs > 0;
+
+  // Read exact premium cost from contract
+  const { data: previewCostRaw, isLoading: isPreviewLoading } = useReadContract({
+    abi: PREMIUM_MODULE_ABI as Abi,
+    address: premiumModuleAddress as `0x${string}`,
+    functionName: "preview_cost",
+    // starknet-react with typed ABI encodes u256 as bigint, u64 as bigint
+    args: [coverageAmountWei, BigInt(durationSecs)],
+    enabled,
+  });
+
+  // Read user's BTC-LST balance
+  const { data: balanceRaw } = useReadContract({
+    abi: ERC20_ABI as Abi,
+    address: TOKENS.btcLst as `0x${string}`,
+    functionName: "balance_of",
+    args: [accountAddress],
+    enabled: !!accountAddress,
+  });
+
+  const premiumWei = parseU256(previewCostRaw);
+  const balanceWei = parseU256(balanceRaw);
+
+  function execute() {
+    if (!accountAddress || !enabled || premiumWei <= 0n) return;
+
+    const [covLow, covHigh] = u256Calldata(coverageAmountWei);
+    const [premLow, premHigh] = u256Calldata(premiumWei);
+
+    txStep.execute([
+      {
+        // Approve the PremiumModule to pull the premium from user's BTC-LST balance
+        contractAddress: TOKENS.btcLst,
+        entrypoint: "approve",
+        calldata: [premiumModuleAddress, premLow, premHigh],
+      },
+      {
+        contractAddress: premiumModuleAddress,
+        entrypoint: "buy_coverage",
+        calldata: [covLow, covHigh, String(durationSecs)],
+      },
+    ]);
+  }
+
+  return {
+    execute,
+    status: txStep.status,
+    txHash: txStep.txHash,
+    reset: txStep.reset,
+    premiumWei,
+    isPreviewLoading,
+    balanceWei,
+  };
+}

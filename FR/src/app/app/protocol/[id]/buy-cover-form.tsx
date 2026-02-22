@@ -1,34 +1,68 @@
 "use client";
 
 import { useState } from "react";
+import { useAccount } from "@starknet-react/core";
 import type { Protocol } from "@/lib/types";
 import { DURATION_OPTIONS } from "@/lib/constants";
-import { calculatePremium, formatDuration } from "@/lib/utils";
+import { formatDuration } from "@/lib/utils";
 import { useToast } from "../../toast";
-
-const MOCK_BTC_LST_PRICE_USD = 60_000;
-const MOCK_USDC_BALANCE = "12,500.00";
+import { useBuyCoverage } from "@/lib/hooks/use-buy-coverage";
 
 export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
   const { toast } = useToast();
+  const { status: accountStatus } = useAccount();
   const [coverageAmount, setCoverageAmount] = useState("");
   const [duration, setDuration] = useState(DURATION_OPTIONS[2].value); // default 90 days
 
   const amountNum = parseFloat(coverageAmount) || 0;
-  const premiumBtcLst = calculatePremium(amountNum, protocol.premium_rate, duration);
-  const premiumUsdc = premiumBtcLst * MOCK_BTC_LST_PRICE_USD;
+  const coverageAmountWei = BigInt(Math.floor(amountNum * 1e18));
+
+  const { execute, status, premiumWei, isPreviewLoading, balanceWei, reset } = useBuyCoverage({
+    premiumModuleAddress: protocol.premium_module_address,
+    coverageAmountWei,
+    durationSecs: duration,
+  });
+
   const ratePercent = (protocol.premium_rate / 100).toFixed(1);
 
+  const premiumHuman =
+    premiumWei > 0n
+      ? (Number(premiumWei) / 1e18).toLocaleString("en-US", { maximumFractionDigits: 6 })
+      : null;
+
+  const balanceHuman = (Number(balanceWei) / 1e18).toLocaleString("en-US", {
+    maximumFractionDigits: 4,
+  });
+
+  const isBusy = status === "pending" || status === "confirming";
+  const isDone = status === "done";
+
   function handleBuy() {
+    if (accountStatus !== "connected") {
+      toast("Connect your wallet first", "error");
+      return;
+    }
     if (amountNum <= 0) {
       toast("Please enter a coverage amount", "error");
       return;
     }
-    toast(
-      `Cover purchased: ${coverageAmount} BTC-LST for ${formatDuration(duration)} — premium: ${premiumUsdc.toFixed(2)} USDC`,
-      "success"
-    );
+    if (premiumWei <= 0n && !isPreviewLoading) {
+      toast("Could not fetch premium cost — try again", "error");
+      return;
+    }
+    execute();
   }
+
+  const buttonLabel =
+    status === "pending"
+      ? "Sign in wallet..."
+      : status === "confirming"
+        ? "Confirming..."
+        : status === "done"
+          ? "Purchased!"
+          : status === "error"
+            ? "Try Again"
+            : "Buy Cover";
 
   return (
     <div className="border border-neutral-800 rounded-xl p-5">
@@ -38,9 +72,7 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
       <div className="mb-4">
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-xs text-neutral-400">Coverage Amount</label>
-          <span className="text-xs text-neutral-500">
-            Bal: {MOCK_USDC_BALANCE} USDC
-          </span>
+          <span className="text-xs text-neutral-500">Bal: {balanceHuman} BTC-LST</span>
         </div>
         <div className="flex items-center border border-neutral-700 rounded-lg overflow-hidden focus-within:border-neutral-500 transition-colors">
           <input
@@ -49,7 +81,10 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
             step="any"
             placeholder="0.00"
             value={coverageAmount}
-            onChange={(e) => setCoverageAmount(e.target.value)}
+            onChange={(e) => {
+              setCoverageAmount(e.target.value);
+              if (status === "done" || status === "error") reset();
+            }}
             className="flex-1 bg-transparent px-3 py-2.5 text-sm text-white placeholder-neutral-600 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
           <span className="px-3 text-xs text-neutral-400 border-l border-neutral-700">
@@ -81,7 +116,7 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
       {/* Cost Summary */}
       <div className="bg-neutral-900 rounded-lg p-3 mb-4 space-y-2">
         <div className="flex justify-between text-xs">
-          <span className="text-neutral-400">Portfolio Value</span>
+          <span className="text-neutral-400">Coverage</span>
           <span>{amountNum > 0 ? `${amountNum} BTC-LST` : "—"}</span>
         </div>
         <div className="flex justify-between text-xs">
@@ -89,31 +124,27 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
           <span>{formatDuration(duration)}</span>
         </div>
         <div className="flex justify-between text-xs">
-          <span className="text-neutral-400">Epoch</span>
-          <span className="text-neutral-500">—</span>
-        </div>
-        <div className="flex justify-between text-xs">
           <span className="text-neutral-400">Premium Rate</span>
           <span>{ratePercent}%</span>
         </div>
         <div className="border-t border-neutral-800 pt-2 flex justify-between text-xs font-medium">
           <span className="text-neutral-400">Premium Cost</span>
-          <div className="text-right">
-            <p>{premiumUsdc > 0 ? `${premiumUsdc.toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC` : "—"}</p>
-            {premiumUsdc > 0 && (
-              <p className="text-[11px] text-neutral-500">
-                &asymp; {premiumBtcLst.toFixed(6)} BTC-LST
-              </p>
-            )}
-          </div>
+          <span>
+            {isPreviewLoading && amountNum > 0
+              ? "Loading..."
+              : premiumHuman
+                ? `${premiumHuman} BTC-LST`
+                : "—"}
+          </span>
         </div>
       </div>
 
       <button
         onClick={handleBuy}
-        className="w-full py-2.5 text-sm font-medium bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors"
+        disabled={isBusy || isDone}
+        className="w-full py-2.5 text-sm font-medium bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Buy Cover
+        {buttonLabel}
       </button>
     </div>
   );

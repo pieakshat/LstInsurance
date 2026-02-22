@@ -8,36 +8,6 @@ import { formatWei, formatDuration } from "@/lib/utils";
 const now = Math.floor(Date.now() / 1000);
 
 const MOCK_COVERS: CoveragePosition[] = [
-  {
-    token_id: 1,
-    protocol_id: 1,
-    protocol_name: "Nostra Finance",
-    logo_url: "https://app.nostra.finance/favicon.ico",
-    coverage_amount: "500000000000000000",
-    premium_paid: "8333333333333333",
-    start_time: now - 30 * 86400,
-    end_time: now + 60 * 86400,
-  },
-  {
-    token_id: 2,
-    protocol_id: 2,
-    protocol_name: "Ekubo Protocol",
-    logo_url: "https://ekubo.org/favicon.ico",
-    coverage_amount: "1000000000000000000",
-    premium_paid: "25000000000000000",
-    start_time: now - 60 * 86400,
-    end_time: now + 30 * 86400,
-  },
-  {
-    token_id: 3,
-    protocol_id: 1,
-    protocol_name: "Nostra Finance",
-    logo_url: "https://app.nostra.finance/favicon.ico",
-    coverage_amount: "250000000000000000",
-    premium_paid: "4166666666666666",
-    start_time: now - 100 * 86400,
-    end_time: now - 10 * 86400,
-  },
 ];
 
 function getStatus(cover: CoveragePosition): "active" | "expired" {

@@ -4,37 +4,11 @@ import Link from "next/link";
 import type { LPPosition } from "@/lib/types";
 import { formatWei, shortenAddress } from "@/lib/utils";
 
-const now = Math.floor(Date.now() / 1000);
-
-const MOCK_POSITIONS: LPPosition[] = [
-  {
-    protocol_id: 1,
-    protocol_name: "Nostra Finance",
-    logo_url: "https://app.nostra.finance/favicon.ico",
-    vault_address: "0x0123456789abcdef0123456789abcdef01234567",
-    shares: "480000000000000000",
-    assets_value: "500000000000000000",
-    deposited_at: now - 45 * 86400,
-  },
-  {
-    protocol_id: 2,
-    protocol_name: "Ekubo Protocol",
-    logo_url: "https://ekubo.org/favicon.ico",
-    vault_address: "0xabcdef0123456789abcdef0123456789abcdef01",
-    shares: "820000000000000000",
-    assets_value: "850000000000000000",
-    deposited_at: now - 20 * 86400,
-  },
-];
-
-// Mock: total LP shares per vault for pool share %
-const MOCK_TOTAL_SHARES: Record<number, string> = {
-  1: "4800000000000000000",
-  2: "8200000000000000000",
-};
+const MOCK_POSITIONS: LPPosition[] = [];
+const MOCK_TOTAL_SHARES: Record<number, string> = {};
 
 function daysSince(unix: number): string {
-  const days = Math.floor((now - unix) / 86400);
+  const days = Math.floor((Math.floor(Date.now() / 1000) - unix) / 86400);
   if (days === 0) return "Today";
   if (days === 1) return "1 day ago";
   return `${days} days ago`;
