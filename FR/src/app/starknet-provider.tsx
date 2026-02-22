@@ -12,7 +12,7 @@ import { ReactNode } from "react";
 
 function rpc() {
   return {
-    nodeUrl: "https://free-rpc.nethermind.io/sepolia-juno/v0_7",
+    nodeUrl: "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/ObRBmbXEtBVr6aVMb4XE4yPd7FajQh63",
   };
 }
 

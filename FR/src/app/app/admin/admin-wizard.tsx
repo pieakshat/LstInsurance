@@ -63,7 +63,7 @@ function loadConfig(): SystemConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
-  } catch {}
+  } catch { }
   return { registry: "", factory: "", coverageToken: "", underlyingAsset: "" };
 }
 
@@ -129,20 +129,18 @@ function StepIndicator({ current }: { current: Step }) {
       {STEP_LABELS.map((label, i) => (
         <div key={i} className="flex items-center gap-2">
           <div
-            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium border ${
-              i < current
-                ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
-                : i === current
-                  ? "bg-white/10 border-white/30 text-white"
-                  : "border-neutral-700 text-neutral-500"
-            }`}
+            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium border ${i < current
+              ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+              : i === current
+                ? "bg-white/10 border-white/30 text-white"
+                : "border-neutral-700 text-neutral-500"
+              }`}
           >
             {i < current ? "\u2713" : i + 1}
           </div>
           <span
-            className={`text-xs hidden sm:inline ${
-              i === current ? "text-white" : "text-neutral-500"
-            }`}
+            className={`text-xs hidden sm:inline ${i === current ? "text-white" : "text-neutral-500"
+              }`}
           >
             {label}
           </span>
@@ -217,13 +215,12 @@ function TxButton({
       </button>
       {status && status !== "idle" && (
         <span
-          className={`text-xs ${
-            status === "done"
-              ? "text-emerald-400"
-              : status === "error"
-                ? "text-red-400"
-                : "text-neutral-400"
-          }`}
+          className={`text-xs ${status === "done"
+            ? "text-emerald-400"
+            : status === "error"
+              ? "text-red-400"
+              : "text-neutral-400"
+            }`}
         >
           {statusText[status] ?? ""}
         </span>
@@ -260,7 +257,7 @@ function useTxStep() {
 
   const { data: receipt } = useTransactionReceipt({
     hash: txHash,
-    watch: true,
+    refetchInterval: 2000,
     enabled: !!txHash && status === "confirming",
   });
 
@@ -273,14 +270,14 @@ function useTxStep() {
 
   useEffect(() => {
     if (!receipt || status !== "confirming") return;
-    if ("execution_status" in receipt) {
-      if (receipt.execution_status === "REVERTED") {
-        setStatus("error");
-        toast("Transaction reverted on-chain", "error");
-      } else if (receipt.execution_status === "SUCCEEDED") {
-        setStatus("done");
-        toast("Transaction confirmed", "success");
-      }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const execStatus = (receipt as any).execution_status as string | undefined;
+    if (execStatus === "SUCCEEDED") {
+      setStatus("done");
+      toast("Transaction confirmed", "success");
+    } else if (execStatus === "REVERTED") {
+      setStatus("error");
+      toast("Transaction reverted on-chain", "error");
     }
   }, [receipt, status, toast]);
 
@@ -447,6 +444,7 @@ export function AdminWizard() {
     const [capLow, capHigh] = u256Calldata(capWei);
     const [rateLow, rateHigh] = u256Calldata(rateBps);
 
+    console.log("registering...")
     registerTx.execute([
       {
         contractAddress: config.registry,
@@ -454,6 +452,7 @@ export function AdminWizard() {
         calldata: [meta.protocolAddress, "0x0", capLow, capHigh, rateLow, rateHigh],
       },
     ]);
+    console.log("done...")
   }
 
   function handleCreateVault() {
@@ -461,6 +460,13 @@ export function AdminWizard() {
     const [pidLow, pidHigh] = u256Calldata(pid);
 
     createVaultTx.execute([
+      {
+        // Grant factory GOVERNANCE_ROLE on registry so the internal
+        // registry.set_vault() call inside create_vault() doesn't revert.
+        contractAddress: config.registry,
+        entrypoint: "set_governance",
+        calldata: [config.factory],
+      },
       {
         contractAddress: config.factory,
         entrypoint: "create_vault",
