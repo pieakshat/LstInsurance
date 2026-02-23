@@ -5,6 +5,7 @@ import type { Abi } from "starknet";
 import { useTxStep } from "./use-tx-step";
 import { PREMIUM_MODULE_ABI } from "../abis/premium-module";
 import { ERC20_ABI } from "../abis/erc20";
+import { VAULT_ABI } from "../abis/vault";
 import { TOKENS } from "../contracts";
 
 const U128_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFn;
@@ -28,10 +29,12 @@ function parseU256(raw: unknown): bigint {
 
 export function useBuyCoverage({
   premiumModuleAddress,
+  vaultAddress,
   coverageAmountWei,
   durationSecs,
 }: {
   premiumModuleAddress: string;
+  vaultAddress: string;
   coverageAmountWei: bigint;
   durationSecs: number;
 }) {
@@ -54,17 +57,28 @@ export function useBuyCoverage({
     enabled,
   });
 
-  // Read user's BTC-LST balance
+  // Read user's USDC balance (the premium payment token)
   const { data: balanceRaw } = useReadContract({
     abi: ERC20_ABI as Abi,
-    address: TOKENS.btcLst as `0x${string}`,
+    address: TOKENS.usdc as `0x${string}`,
     functionName: "balance_of",
     args: [accountAddress],
-    enabled: !!accountAddress,
+    enabled: !!accountAddress && TOKENS.usdc !== "0x0",
+  });
+
+  // Read vault available liquidity to warn user if vault is underfunded
+  const { data: liquidityRaw } = useReadContract({
+    abi: VAULT_ABI as Abi,
+    address: vaultAddress as `0x${string}`,
+    functionName: "available_liquidity",
+    args: [],
+    enabled: !!vaultAddress && vaultAddress !== "0x0",
   });
 
   const premiumWei = parseU256(previewCostRaw);
   const balanceWei = parseU256(balanceRaw);
+  const availableLiquidityWei = parseU256(liquidityRaw);
+  const hasEnoughLiquidity = availableLiquidityWei >= coverageAmountWei;
 
   function execute() {
     if (!accountAddress || !enabled || premiumWei <= 0n) return;
@@ -74,8 +88,8 @@ export function useBuyCoverage({
 
     txStep.execute([
       {
-        // Approve the PremiumModule to pull the premium from user's BTC-LST balance
-        contractAddress: TOKENS.btcLst,
+        // Approve the PremiumModule to pull the USDC premium from user's wallet
+        contractAddress: TOKENS.usdc,
         entrypoint: "approve",
         calldata: [premiumModuleAddress, premLow, premHigh],
       },
@@ -95,5 +109,7 @@ export function useBuyCoverage({
     premiumWei,
     isPreviewLoading,
     balanceWei,
+    availableLiquidityWei,
+    hasEnoughLiquidity,
   };
 }

@@ -60,6 +60,10 @@ const DEPOSIT_AMOUNT: u256 = 100_000_000_000_000_000_000; // 100e18
 fn deploy_mock_erc20() -> ContractAddress {
     let contract = declare("MockERC20").unwrap().contract_class();
     let mut calldata: Array<felt252> = array![];
+    let name: ByteArray = "Mock BTC-LST";
+    let symbol: ByteArray = "mBTC";
+    name.serialize(ref calldata);
+    symbol.serialize(ref calldata);
     INITIAL_SUPPLY.serialize(ref calldata);
     OWNER().serialize(ref calldata);
     let (addr, _) = contract.deploy(@calldata).unwrap();
@@ -148,6 +152,7 @@ fn setup_factory() -> (ContractAddress, ContractAddress, ContractAddress, Contra
     (*vault_class.class_hash).serialize(ref calldata);
     (*premium_class.class_hash).serialize(ref calldata);
     coverage_token_addr.serialize(ref calldata);
+    asset_addr.serialize(ref calldata); // premium_asset (mock USDC; reuse asset here for tests)
     OWNER().serialize(ref calldata);
     let (factory_addr, _) = factory_class.deploy(@calldata).unwrap();
 

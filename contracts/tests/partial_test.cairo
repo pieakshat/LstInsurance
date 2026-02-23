@@ -50,7 +50,8 @@ fn XYZ_PROTOCOL() -> ContractAddress {
 }
 
 // --- Constants ---
-const TOKEN_SUPPLY: u256 = 10_000_000_000_000_000_000_000; // 10,000e18
+// Needs to cover buyer's 60,000 USDC premium (800 BTC-LST × $75) + LP deposits
+const TOKEN_SUPPLY: u256 = 100_000_000_000_000_000_000_000; // 100,000e18
 const BASE_TIME: u64 = 1_700_000_000;
 const NINETY_DAYS: u64 = 7_776_000;
 
@@ -61,6 +62,10 @@ const NINETY_DAYS: u64 = 7_776_000;
 fn deploy_erc20(supply: u256) -> ContractAddress {
     let contract = declare("MockERC20").unwrap().contract_class();
     let mut calldata: Array<felt252> = array![];
+    let name: ByteArray = "Mock Token";
+    let symbol: ByteArray = "MTK";
+    name.serialize(ref calldata);
+    symbol.serialize(ref calldata);
     supply.serialize(ref calldata);
     OWNER().serialize(ref calldata);
     let (addr, _) = contract.deploy(@calldata).unwrap();
@@ -237,11 +242,11 @@ fn test_full_insurance_flow() {
     let duration: u64 = NINETY_DAYS;
 
     // Preview the USDC cost first
-    // Formula: coverage * rate * duration / (RATE_DENOM * BASE_DURATION)
-    //        = 800e18 * 500 * 90d / (10000 * 90d) = 800e18 * 0.05 = 40e18 USDC
+    // Formula: coverage * BASE_BTCLST_PRICE_USDC * rate / (PRICE_PRECISION * RATE_DENOM)
+    //        = 800e18 * 1500e18 * 500 / (1e18 * 10000) = 800 * 75 = 60,000 USDC
     let premium_cost = pm.preview_cost(coverage_amount, duration);
-    let expected_cost: u256 = 40_000_000_000_000_000_000; // 40 USDC
-    assert(premium_cost == expected_cost, 'Premium should be 40 USDC');
+    let expected_cost: u256 = 60_000_000_000_000_000_000_000; // 60,000e18 USDC
+    assert(premium_cost == expected_cost, 'Premium should be 60k USDC');
 
     // Fund buyer with USDC and approve premium module
     fund_and_approve(usdc, COVERAGE_BUYER(), pm_addr, premium_cost);
@@ -257,7 +262,7 @@ fn test_full_insurance_flow() {
     let position: CoveragePosition = cov_token.get_coverage(token_id);
     assert(position.protocol_id == 1, 'Covers XYZ protocol (id=1)');
     assert(position.coverage_amount == coverage_amount, 'Coverage = 800 LST');
-    assert(position.premium_paid == premium_cost, 'Paid 40 USDC');
+    assert(position.premium_paid == premium_cost, 'Paid 60k USDC');
     assert(position.start_time == BASE_TIME, 'Starts now');
     assert(position.end_time == BASE_TIME + NINETY_DAYS, 'Ends in 90 days');
 
@@ -268,7 +273,7 @@ fn test_full_insurance_flow() {
     // ── Verify: Premium module state updated ──
     assert(pm.is_subscribed(COVERAGE_BUYER()), 'Buyer is subscribed');
     assert(pm.total_active_coverage() == coverage_amount, '800 LST active coverage');
-    assert(pm.pending_premiums() == premium_cost, '40 USDC pending');
+    assert(pm.pending_premiums() == premium_cost, '60k USDC pending');
 
     // ─────────────────────────────────────────────
     // Phase 5: Governance advances epoch
@@ -280,7 +285,7 @@ fn test_full_insurance_flow() {
     stop_cheat_caller_address(pm_addr);
 
     assert(pm.current_epoch() == 2, 'Now epoch 2');
-    assert(pm.epoch_premiums(1) == premium_cost, 'Epoch 1 = 40 USDC');
+    assert(pm.epoch_premiums(1) == premium_cost, 'Epoch 1 = 60k USDC');
     assert(pm.pending_premiums() == 0, 'Pending reset to 0');
 
     // ─────────────────────────────────────────────

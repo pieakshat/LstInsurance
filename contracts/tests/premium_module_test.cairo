@@ -37,7 +37,8 @@ fn PROTOCOL_ADDR() -> ContractAddress {
 }
 
 // --- Constants ---
-const INITIAL_SUPPLY: u256 = 1_000_000_000_000_000_000_000; // 1000e18
+// Needs to cover LP deposits (200e18) + buyer premiums (7500e18 per 100e18 coverage)
+const INITIAL_SUPPLY: u256 = 100_000_000_000_000_000_000_000; // 100,000e18
 const COVERAGE_CAP: u256 = 1_000_000_000_000_000_000_000; // 1000e18
 const PREMIUM_RATE: u256 = 500; // 5% for 90-day base
 const COVERAGE_AMOUNT: u256 = 100_000_000_000_000_000_000; // 100e18
@@ -52,6 +53,10 @@ const BASE_TIME: u64 = 1000000;
 fn deploy_mock_erc20() -> ContractAddress {
     let contract = declare("MockERC20").unwrap().contract_class();
     let mut calldata: Array<felt252> = array![];
+    let name: ByteArray = "Mock BTC-LST";
+    let symbol: ByteArray = "mBTC";
+    name.serialize(ref calldata);
+    symbol.serialize(ref calldata);
     INITIAL_SUPPLY.serialize(ref calldata);
     OWNER().serialize(ref calldata);
     let (addr, _) = contract.deploy(@calldata).unwrap();
@@ -194,9 +199,9 @@ fn test_preview_cost() {
     let (_asset, _vault, _reg, _cov, pm_addr) = setup_premium();
     let pm = IPremiumModuleDispatcher { contract_address: pm_addr };
 
-    // 100e18 * 500 * 7776000 / (10000 * 7776000) = 100e18 * 500 / 10000 = 5e18
+    // 100e18 * 1500e18 * 500 / (1e18 * 10000) = 100 * 75 = 7500 USDC
     let cost = pm.preview_cost(COVERAGE_AMOUNT, DURATION_90_DAYS);
-    let expected: u256 = 5_000_000_000_000_000_000;
+    let expected: u256 = 7_500_000_000_000_000_000_000; // 7500e18
     assert(cost == expected, 'Preview cost wrong');
 
     // Half duration = half cost

@@ -16,7 +16,8 @@ interface SystemConfig {
   registry: string;
   factory: string;
   coverageToken: string;
-  underlyingAsset: string;
+  underlyingAsset: string; // BTC-LST — vault collateral
+  premiumAsset: string;    // USDC — token users pay premiums in
 }
 
 interface ProtocolMeta {
@@ -53,13 +54,13 @@ const SHIFT_128 = BigInt(128);
 
 function loadConfig(): SystemConfig {
   if (typeof window === "undefined") {
-    return { registry: "", factory: "", coverageToken: "", underlyingAsset: "" };
+    return { registry: "", factory: "", coverageToken: "", underlyingAsset: "", premiumAsset: "" };
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch { }
-  return { registry: "", factory: "", coverageToken: "", underlyingAsset: "" };
+  return { registry: "", factory: "", coverageToken: "", underlyingAsset: "", premiumAsset: "" };
 }
 
 function saveConfig(config: SystemConfig) {
@@ -483,7 +484,8 @@ export function AdminWizard() {
     isValidAddress(config.registry) &&
     isValidAddress(config.factory) &&
     isValidAddress(config.coverageToken) &&
-    isValidAddress(config.underlyingAsset);
+    isValidAddress(config.underlyingAsset) &&
+    isValidAddress(config.premiumAsset);
 
   const metaValid =
     meta.protocolName.trim() !== "" &&
@@ -531,6 +533,14 @@ export function AdminWizard() {
             value={config.underlyingAsset}
             onChange={(v) => setConfig((c) => ({ ...c, underlyingAsset: v }))}
             placeholder="0x..."
+            hint="Vault collateral token — LPs deposit this, payouts are in this"
+          />
+          <Field
+            label="Premium Asset (USDC) Address"
+            value={config.premiumAsset}
+            onChange={(v) => setConfig((c) => ({ ...c, premiumAsset: v }))}
+            placeholder="0x..."
+            hint="Token users pay premiums in — must match what factory was deployed with"
           />
           <div className="mt-6">
             <button

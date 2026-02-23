@@ -1,7 +1,6 @@
 #[starknet::contract]
 pub mod MockERC20 {
     use openzeppelin::token::erc20::{DefaultConfig, ERC20Component, ERC20HooksEmptyImpl};
-    use openzeppelin::interfaces::erc20::IERC20Metadata;
     use starknet::ContractAddress;
 
     component!(path: ERC20Component, storage: erc20, event: ERC20Event);
@@ -10,6 +9,8 @@ pub mod MockERC20 {
     impl ERC20Impl = ERC20Component::ERC20Impl<ContractState>;
     #[abi(embed_v0)]
     impl ERC20CamelOnlyImpl = ERC20Component::ERC20CamelOnlyImpl<ContractState>;
+    #[abi(embed_v0)]
+    impl ERC20MetadataImpl = ERC20Component::ERC20MetadataImpl<ContractState>;
     impl ERC20InternalImpl = ERC20Component::InternalImpl<ContractState>;
 
     #[storage]
@@ -26,22 +27,15 @@ pub mod MockERC20 {
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState, initial_supply: u256, recipient: ContractAddress) {
-        self.erc20.initializer("Mock Token", "MTK");
+    fn constructor(
+        ref self: ContractState,
+        name: ByteArray,
+        symbol: ByteArray,
+        initial_supply: u256,
+        recipient: ContractAddress,
+    ) {
+        self.erc20.initializer(name, symbol);
         self.erc20.mint(recipient, initial_supply);
-    }
-
-    #[abi(embed_v0)]
-    impl MetadataImpl of IERC20Metadata<ContractState> {
-        fn name(self: @ContractState) -> ByteArray {
-            "Mock Token"
-        }
-        fn symbol(self: @ContractState) -> ByteArray {
-            "MTK"
-        }
-        fn decimals(self: @ContractState) -> u8 {
-            18
-        }
     }
 
     #[external(v0)]

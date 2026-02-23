@@ -17,8 +17,18 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
   const amountNum = parseFloat(coverageAmount) || 0;
   const coverageAmountWei = BigInt(Math.floor(amountNum * 1e18));
 
-  const { execute, status, premiumWei, isPreviewLoading, balanceWei, reset } = useBuyCoverage({
+  const {
+    execute,
+    status,
+    premiumWei,
+    isPreviewLoading,
+    balanceWei,
+    availableLiquidityWei,
+    hasEnoughLiquidity,
+    reset,
+  } = useBuyCoverage({
     premiumModuleAddress: protocol.premium_module_address,
+    vaultAddress: protocol.vault_address,
     coverageAmountWei,
     durationSecs: duration,
   });
@@ -30,6 +40,7 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
       ? (Number(premiumWei) / 1e18).toLocaleString("en-US", { maximumFractionDigits: 6 })
       : null;
 
+  // USDC typically uses 6 decimals on mainnet but our MockUSDC uses 18 — keep 18 here
   const balanceHuman = (Number(balanceWei) / 1e18).toLocaleString("en-US", {
     maximumFractionDigits: 4,
   });
@@ -44,6 +55,10 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
     }
     if (amountNum <= 0) {
       toast("Please enter a coverage amount", "error");
+      return;
+    }
+    if (!hasEnoughLiquidity && coverageAmountWei > 0n) {
+      toast("Not enough liquidity in the vault — LPs must deposit first", "error");
       return;
     }
     if (premiumWei <= 0n && !isPreviewLoading) {
@@ -72,7 +87,7 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
       <div className="mb-4">
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-xs text-neutral-400">Coverage Amount</label>
-          <span className="text-xs text-neutral-500">Bal: {balanceHuman} BTC-LST</span>
+          <span className="text-xs text-neutral-500">Bal: {balanceHuman} USDC</span>
         </div>
         <div className="flex items-center border border-neutral-700 rounded-lg overflow-hidden focus-within:border-neutral-500 transition-colors">
           <input
@@ -133,15 +148,25 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
             {isPreviewLoading && amountNum > 0
               ? "Loading..."
               : premiumHuman
-                ? `${premiumHuman} BTC-LST`
+                ? `${premiumHuman} USDC`
                 : "—"}
           </span>
         </div>
       </div>
 
+      {/* Vault liquidity warning */}
+      {coverageAmountWei > 0n && !hasEnoughLiquidity && (
+        <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
+          Vault has insufficient liquidity for this coverage amount. LPs must deposit BTC-LST into the vault first.{" "}
+          <span className="text-amber-500">
+            Available: {(Number(availableLiquidityWei) / 1e18).toFixed(4)} BTC-LST
+          </span>
+        </div>
+      )}
+
       <button
         onClick={handleBuy}
-        disabled={isBusy || isDone}
+        disabled={isBusy || isDone || (coverageAmountWei > 0n && !hasEnoughLiquidity)}
         className="w-full py-2.5 text-sm font-medium bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {buttonLabel}

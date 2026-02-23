@@ -69,7 +69,13 @@ pub mod PremiumModule {
     pub const GOVERNANCE_ROLE: felt252 = selector!("GOVERNANCE_ROLE");
 
     pub const RATE_DENOMINATOR: u256 = 10000;
-    pub const BASE_DURATION: u64 = 7776000; // 90 days 
+    pub const BASE_DURATION: u64 = 7776000; // 90 days
+
+    // Hardcoded BTC-LST notional value in USDC (18 decimals) used for premium pricing.
+    // At 5% rate for 90 days: 1 BTC-LST → $75 USDC premium.
+    // (1500 * 5% = 75)
+    pub const BASE_BTCLST_PRICE_USDC: u256 = 1_500_000_000_000_000_000_000; // 1500e18
+    pub const PRICE_PRECISION: u256 = 1_000_000_000_000_000_000; // 1e18
 
     component!(path: AccessControlComponent, storage: access_control, event: AccessControlEvent);
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
@@ -208,10 +214,17 @@ pub mod PremiumModule {
         }
     }
 
+    // premium = coverage_btclst * BASE_BTCLST_PRICE_USDC * rate * duration
+    //           / (PRICE_PRECISION * RATE_DENOMINATOR * BASE_DURATION)
+    // At 5% rate, 90 days, 1 BTC-LST → 75 USDC.
     fn compute_premium(coverage_amount: u256, premium_rate: u256, duration: u64) -> u256 {
         let duration_u256: u256 = duration.into();
         let base_duration_u256: u256 = BASE_DURATION.into();
-        coverage_amount * premium_rate * duration_u256 / (RATE_DENOMINATOR * base_duration_u256)
+        coverage_amount
+            * BASE_BTCLST_PRICE_USDC
+            * premium_rate
+            * duration_u256
+            / (PRICE_PRECISION * RATE_DENOMINATOR * base_duration_u256)
     }
 
     #[abi(embed_v0)]

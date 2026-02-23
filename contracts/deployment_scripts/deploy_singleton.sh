@@ -8,12 +8,12 @@ URL="https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/ObRBmbXEt
 OWNER="0x02d6a1ea40e3cb95a061ff9b1923ba549499be08bf3e26b1b21366b6d83abdde"
 
 # ─── Class Hashes ─────────────────────────────────────────────────────────────
-MOCK_ERC20_CLASS="0x149729072ed51b3a3fcf73671e7b54492c4aa89f96d68906afd6794ea565626"
+MOCK_ERC20_CLASS="0x2b488f63133e09edb0e1af1103562e5bbc5644bc1cda6828af71b5c31454c2b"
 REGISTRY_CLASS="0xa0f72536abce9cd219498db119c46b2636920bf03508f95d39216af29ad8da"
 COVERAGE_TOKEN_CLASS="0x6aededc2b55174462d21a10b09ab3bb329b4fa909372ba56c7c79944030037b"
 VAULT_CLASS="0x6267345c81110cf7707959a9ff8adc91d63965ed8ba55234dd78ec1c96e65e3"
 PREMIUM_CLASS="0x7650862ea26aa86d519fa11eb1e3657e9485be161b71172f4a0650e86f22a1b"
-FACTORY_CLASS="0x4661d3bf0883817b7b6e55ab9806fa1ccaabb5d08f3d0abf5628e72b4401e00"
+FACTORY_CLASS="0x512985e99d2384462643688471ae2b7f112ef9fa9e30935f366243f2da52217"
 
 # ─── 1. MockERC20 (initial_supply, recipient) ──────────────────────────────────
 echo "Deploying MockERC20..."

@@ -50,7 +50,8 @@ fn PROTOCOL_ADDR() -> ContractAddress {
 }
 
 // ── Constants ──
-const TOKEN_SUPPLY: u256 = 10_000_000_000_000_000_000_000; // 10,000e18
+// Needs to cover LP deposit (1000e18) + buyer premium (37,500e18 for 500e18 coverage × $75)
+const TOKEN_SUPPLY: u256 = 100_000_000_000_000_000_000_000; // 100,000e18
 const BASE_TIME: u64 = 1_700_000_000;
 const NINETY_DAYS: u64 = 7_776_000;
 
@@ -59,6 +60,10 @@ const NINETY_DAYS: u64 = 7_776_000;
 fn deploy_erc20(supply: u256) -> ContractAddress {
     let contract = declare("MockERC20").unwrap().contract_class();
     let mut calldata: Array<felt252> = array![];
+    let name: ByteArray = "Mock Token";
+    let symbol: ByteArray = "MTK";
+    name.serialize(ref calldata);
+    symbol.serialize(ref calldata);
     supply.serialize(ref calldata);
     OWNER().serialize(ref calldata);
     let (addr, _) = contract.deploy(@calldata).unwrap();

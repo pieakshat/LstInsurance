@@ -31,10 +31,12 @@ pub trait IInsuranceVaultFactory<TContractState> {
     fn set_premium_class_hash(ref self: TContractState, new_hash: starknet::ClassHash);
     fn set_registry(ref self: TContractState, new_registry: starknet::ContractAddress);
     fn set_coverage_token(ref self: TContractState, token: starknet::ContractAddress);
+    fn set_premium_asset(ref self: TContractState, asset: starknet::ContractAddress);
 
     fn get_vault(self: @TContractState, protocol_id: u256) -> starknet::ContractAddress;
     fn get_premium_module(self: @TContractState, protocol_id: u256) -> starknet::ContractAddress;
     fn get_protocol(self: @TContractState, vault: starknet::ContractAddress) -> u256;
+    fn get_premium_asset(self: @TContractState) -> starknet::ContractAddress;
     fn all_vaults(self: @TContractState) -> Array<starknet::ContractAddress>;
     fn vault_count(self: @TContractState) -> u32;
 }
@@ -83,6 +85,9 @@ pub mod InsuranceVaultFactory {
         vault_class_hash: ClassHash,
         premium_class_hash: ClassHash,
         coverage_token: ContractAddress,
+        // Token users pay premiums in (e.g. USDC). Separate from the vault's
+        // underlying_asset (BTC-LST) which backs the coverage pool.
+        premium_asset: ContractAddress,
         vault_by_protocol: Map<u256, ContractAddress>,
         premium_by_protocol: Map<u256, ContractAddress>,
         protocol_by_vault: Map<ContractAddress, u256>,
@@ -130,10 +135,12 @@ pub mod InsuranceVaultFactory {
         vault_class_hash: ClassHash,
         premium_class_hash: ClassHash,
         coverage_token: ContractAddress,
+        premium_asset: ContractAddress,
         owner: ContractAddress,
     ) {
         assert(registry.is_non_zero(), 'Invalid registry');
         assert(coverage_token.is_non_zero(), 'Invalid coverage token');
+        assert(premium_asset.is_non_zero(), 'Invalid premium asset');
 
         self.access_control.initializer();
 
@@ -147,6 +154,7 @@ pub mod InsuranceVaultFactory {
         self.vault_class_hash.write(vault_class_hash);
         self.premium_class_hash.write(premium_class_hash);
         self.coverage_token.write(coverage_token);
+        self.premium_asset.write(premium_asset);
     }
 
     #[abi(embed_v0)]
@@ -193,13 +201,17 @@ pub mod InsuranceVaultFactory {
                 .unwrap_syscall();
 
             // --- Deploy premium module ---
+            // NOTE: premium_asset (e.g. USDC) is separate from underlying_asset (BTC-LST).
+            // The vault holds BTC-LST for coverage payouts; the PM pulls USDC from users
+            // as the premium payment token.
             let coverage_token = self.coverage_token.read();
+            let premium_asset = self.premium_asset.read();
             let mut pm_calldata: Array<felt252> = array![];
             protocol_id.serialize(ref pm_calldata);
             vault_address.serialize(ref pm_calldata);
             registry_addr.serialize(ref pm_calldata);
             coverage_token.serialize(ref pm_calldata);
-            underlying_asset.serialize(ref pm_calldata);
+            premium_asset.serialize(ref pm_calldata);
             owner.serialize(ref pm_calldata);
 
             let pm_salt: felt252 = (protocol_id.low + 0x50524D).into();
@@ -257,6 +269,12 @@ pub mod InsuranceVaultFactory {
             self.coverage_token.write(token);
         }
 
+        fn set_premium_asset(ref self: ContractState, asset: ContractAddress) {
+            self.access_control.assert_only_role(OWNER_ROLE);
+            assert(asset.is_non_zero(), 'Invalid premium asset');
+            self.premium_asset.write(asset);
+        }
+
         fn get_vault(self: @ContractState, protocol_id: u256) -> ContractAddress {
             self.vault_by_protocol.entry(protocol_id).read()
         }
@@ -267,6 +285,10 @@ pub mod InsuranceVaultFactory {
 
         fn get_protocol(self: @ContractState, vault: ContractAddress) -> u256 {
             self.protocol_by_vault.entry(vault).read()
+        }
+
+        fn get_premium_asset(self: @ContractState) -> ContractAddress {
+            self.premium_asset.read()
         }
 
         fn all_vaults(self: @ContractState) -> Array<ContractAddress> {

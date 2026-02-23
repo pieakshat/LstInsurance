@@ -13,11 +13,11 @@ claimsManager:
 
 Vault factory, mock BTC-LST, protocol registry, coverage token
 
-Vault factory class hash: 0x4661d3bf0883817b7b6e55ab9806fa1ccaabb5d08f3d0abf5628e72b4401e00
+Vault factory class hash: 0x512985e99d2384462643688471ae2b7f112ef9fa9e30935f366243f2da52217
 
 
 mockERC20 class hash: 
-0x149729072ed51b3a3fcf73671e7b54492c4aa89f96d68906afd6794ea565626
+0x2b488f63133e09edb0e1af1103562e5bbc5644bc1cda6828af71b5c31454c2b
 
 protocolRegistry class hash: 
 0xa0f72536abce9cd219498db119c46b2636920bf03508f95d39216af29ad8da

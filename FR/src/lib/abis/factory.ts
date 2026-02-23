@@ -141,6 +141,29 @@ export const FACTORY_ABI = [
       },
       {
         "type": "function",
+        "name": "set_premium_asset",
+        "inputs": [
+          {
+            "name": "asset",
+            "type": "core::starknet::contract_address::ContractAddress"
+          }
+        ],
+        "outputs": [],
+        "state_mutability": "external"
+      },
+      {
+        "type": "function",
+        "name": "get_premium_asset",
+        "inputs": [],
+        "outputs": [
+          {
+            "type": "core::starknet::contract_address::ContractAddress"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
         "name": "get_vault",
         "inputs": [
           {

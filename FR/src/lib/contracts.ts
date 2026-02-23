@@ -11,9 +11,11 @@ export const CONTRACTS = {
 // (stored in MongoDB: protocol.vault_address, protocol.premium_module_address)
 
 export const TOKENS = {
-  // MockERC20 deployed on Starknet Sepolia — used as both BTC-LST and premium payment token
-  btcLst: "0x02b2392f405feba76ec54294f5920b29e055fc3bf18f480d229795d7f0e04a11",
-  usdc: "0x0", // not used in current protocol design
+  // BTC-LST: vault collateral token — LPs deposit this, payouts are denominated in this
+  btcLst: "0x03a796c96835c5b8ace116314af06cd6064b0ea0ce0d59e48db3d3421c9e0591",
+  // USDC: premium payment token — users pay premiums in this when buying coverage.
+  // Update this address after deploying MockUSDC (or use a Sepolia USDC address).
+  usdc: "0x0",
 } as const;
 
 export function getContract(
