@@ -45,6 +45,14 @@ const STEP_LABELS = [
 
 const STORAGE_KEY = "strk-insurance-admin-config";
 
+const DEFAULT_CONFIG: SystemConfig = {
+  registry:        "0x063496b0409b179d6ec465f6e0c9936a41d3a71d4e4e0f3f743d78ca258a17cb",
+  factory:         "0x05a1cf3518bb1ea5e9eb9c8d62c58087062d3f566c65849f2343eeaed8df4359",
+  coverageToken:   "0x07cf16f16fe7e96d66cf063739bf8d8f078ca944a271723dca5403f8c946ff5d",
+  underlyingAsset: "0x02579f9dc11305ff5b300babde1ee79176a6d58c0f0a022c992ce3f8195b65ee",
+  premiumAsset:    "0x04621e68e8784928870a619f405e807cf061096f301eb8b7c1fee7dc35bef91a",
+};
+
 const U128_MASK = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
 const SHIFT_128 = BigInt(128);
 
@@ -53,14 +61,22 @@ const SHIFT_128 = BigInt(128);
 // ---------------------------------------------------------------------------
 
 function loadConfig(): SystemConfig {
-  if (typeof window === "undefined") {
-    return { registry: "", factory: "", coverageToken: "", underlyingAsset: "", premiumAsset: "" };
-  }
+  if (typeof window === "undefined") return DEFAULT_CONFIG;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const saved: SystemConfig = JSON.parse(raw);
+      // If the saved registry address is stale (doesn't match what's deployed),
+      // discard it and use the defaults — avoids cross-registry permission bugs
+      // where set_governance goes to the old registry but the factory uses the new one.
+      if (saved.registry !== DEFAULT_CONFIG.registry) {
+        localStorage.removeItem(STORAGE_KEY);
+        return DEFAULT_CONFIG;
+      }
+      return saved;
+    }
   } catch { }
-  return { registry: "", factory: "", coverageToken: "", underlyingAsset: "", premiumAsset: "" };
+  return DEFAULT_CONFIG;
 }
 
 function saveConfig(config: SystemConfig) {
@@ -239,7 +255,7 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
 // ---------------------------------------------------------------------------
 
 export function AdminWizard() {
-  const { status: accountStatus } = useAccount();
+  const { status: accountStatus, address: accountAddress } = useAccount();
   const { toast } = useToast();
 
   const [step, setStep] = useState<Step>(0);
@@ -299,7 +315,21 @@ export function AdminWizard() {
 
   useEffect(() => {
     if (protocolCount !== undefined && registerTx.status === "done" && !protocolId) {
-      const id = String(protocolCount);
+      // starknet-react may return u256 as a plain bigint or as {low, high} struct
+      let id: string;
+      if (typeof protocolCount === "bigint") {
+        id = String(protocolCount);
+      } else if (
+        typeof protocolCount === "object" &&
+        protocolCount !== null &&
+        "low" in (protocolCount as object)
+      ) {
+        const r = protocolCount as { low: unknown; high: unknown };
+        const v = (BigInt(String(r.high)) << SHIFT_128) | BigInt(String(r.low));
+        id = String(v);
+      } else {
+        id = String(protocolCount);
+      }
       setProtocolId(id);
       toast(`Protocol registered with ID ${id}`, "success");
     }
@@ -369,25 +399,36 @@ export function AdminWizard() {
   // ---- Actions ----
 
   function handleRegister() {
+    if (!accountAddress) { toast("Wallet not connected", "error"); return; }
     const capWei = BigInt(Math.floor(Number(meta.coverageCap) * 1e18));
     const rateBps = BigInt(Math.round(Number(meta.premiumRate) * 100));
     const [capLow, capHigh] = u256Calldata(capWei);
     const [rateLow, rateHigh] = u256Calldata(rateBps);
 
-    console.log("registering...")
     registerTx.execute([
+      {
+        // Registry constructor only grants OWNER_ROLE, not GOVERNANCE_ROLE.
+        // Grant GOVERNANCE_ROLE to the connected wallet first so register_protocol succeeds.
+        contractAddress: config.registry,
+        entrypoint: "set_governance",
+        calldata: [accountAddress as string],
+      },
       {
         contractAddress: config.registry,
         entrypoint: "register_protocol",
         calldata: [meta.protocolAddress, "0x0", capLow, capHigh, rateLow, rateHigh],
       },
     ]);
-    console.log("done...")
   }
 
   function handleCreateVault() {
     const pid = BigInt(protocolId);
+    if (pid === 0n) { toast("Protocol ID is 0 — registration may not have confirmed yet", "error"); return; }
     const [pidLow, pidHigh] = u256Calldata(pid);
+
+    console.log("[createVault] registry:", config.registry, "factory:", config.factory);
+    console.log("[createVault] protocolId:", protocolId, "pidLow:", pidLow, "pidHigh:", pidHigh);
+    console.log("[createVault] underlyingAsset:", config.underlyingAsset);
 
     createVaultTx.execute([
       {

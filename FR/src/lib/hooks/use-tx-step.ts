@@ -52,11 +52,26 @@ export function useTxStep() {
         // Pre-simulate against the RPC to get the real contract revert reason
         // before the wallet opens. Argent X's own simulation only surfaces
         // "argent/multicall-failed" with no details.
+        // If simulation throws an unrecognised error (e.g. RPC hiccup or
+        // encoding mismatch), log it and let the wallet handle it rather than
+        // blocking the user entirely.
         if (account) {
-          await account.simulateTransaction(
-            [{ type: TransactionType.INVOKE, payload: calls }],
-            { skipValidate: true },
-          );
+          try {
+            await account.simulateTransaction(
+              [{ type: TransactionType.INVOKE, payload: calls }],
+              { skipValidate: true },
+            );
+          } catch (simErr) {
+            const friendly = parseContractError(simErr);
+            if (friendly !== "Transaction failed — please try again") {
+              // Decoded a real revert reason — abort before opening wallet
+              setStatus("error");
+              toast(friendly, "error");
+              return;
+            }
+            // Unknown/generic error from simulation — log and fall through to wallet
+            console.warn("[useTxStep] pre-simulation failed:", simErr);
+          }
         }
 
         const result = await sendAsync(calls);
