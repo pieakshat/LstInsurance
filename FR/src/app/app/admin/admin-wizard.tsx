@@ -296,6 +296,11 @@ export function AdminWizard() {
   const setMinterTx = useTxStep();
   const setDepositLimitTx = useTxStep();
   const setCoverageManagerTx = useTxStep();
+  const expireTx = useTxStep();
+
+  // Expire coverage tool state
+  const [expirePmAddress, setExpirePmAddress] = useState("");
+  const [expireTokenId, setExpireTokenId] = useState("");
 
   // ---- Read protocol_count after registration tx ----
   const { data: protocolCount, refetch: refetchCount } = useReadContract({
@@ -481,6 +486,24 @@ export function AdminWizard() {
         contractAddress: vaultAddress,
         entrypoint: "set_coverage_manager",
         calldata: [premiumModuleAddress],
+      },
+    ]);
+  }
+
+  function handleExpireCoverage() {
+    if (!expirePmAddress || !isValidAddress(expirePmAddress)) {
+      toast("Enter a valid PremiumModule address", "error"); return;
+    }
+    const tokenId = BigInt(expireTokenId.trim() || "0");
+    if (tokenId === 0n) {
+      toast("Enter a valid token ID", "error"); return;
+    }
+    const [idLow, idHigh] = u256Calldata(tokenId);
+    expireTx.execute([
+      {
+        contractAddress: expirePmAddress,
+        entrypoint: "expire_coverage",
+        calldata: [idLow, idHigh],
       },
     ]);
   }
@@ -832,6 +855,49 @@ export function AdminWizard() {
           </div>
         </div>
       )}
+
+      {/* Maintenance Tools — always visible */}
+      <div className="mt-10 border-t border-neutral-800 pt-8">
+        <h2 className="text-base font-semibold mb-1">Maintenance</h2>
+        <p className="text-xs text-neutral-500 mb-4">
+          Utility actions that can be run at any time, independent of the setup wizard.
+        </p>
+
+        <div className="border border-neutral-800 rounded-lg p-4">
+          <h3 className="text-sm font-medium mb-1">Expire Coverage</h3>
+          <p className="text-xs text-neutral-500 mb-3">
+            Calls <code className="text-neutral-400">premiumModule.expire_coverage(token_id)</code> to
+            unlock vault liquidity after a coverage NFT has expired. Anyone can call this once the
+            policy end time has passed.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+            <Field
+              label="PremiumModule Address"
+              value={expirePmAddress}
+              onChange={setExpirePmAddress}
+              placeholder="0x..."
+            />
+            <Field
+              label="Coverage Token ID"
+              value={expireTokenId}
+              onChange={setExpireTokenId}
+              placeholder="e.g. 1"
+              type="number"
+            />
+          </div>
+          <TxButton
+            label="Expire Coverage"
+            onClick={handleExpireCoverage}
+            status={expireTx.status}
+            disabled={!expirePmAddress || !expireTokenId}
+          />
+          {expireTx.status === "done" && (
+            <p className="text-xs text-emerald-400 mt-1">
+              Liquidity unlocked successfully.
+            </p>
+          )}
+        </div>
+      </div>
 
       {/* Step 4: Save to Database */}
       {step === 4 && (

@@ -13,14 +13,13 @@ const ERROR_MAP: Record<string, string> = {
   "ERC4626: exceeds max deposit": "Vault deposit limit reached",
   "Exceeds vault liquidity": "Not enough liquidity in the vault — LPs need to deposit first",
   "Exceeds total assets": "Not enough liquidity in the vault — LPs need to deposit first",
-  "Caller is missing role": "Permission error — contract not properly configured",
+  "Caller is missing role": "Permission error — wallet may not be the contract owner",
   "Coverage still active": "Coverage has not expired yet",
   "Coverage must be > 0": "Coverage amount must be greater than zero",
   "Duration must be > 0": "Duration must be greater than zero",
   "Protocol does not exist": "Protocol not found — re-run Register Protocol or check Protocol ID",
   "Vault already deployed": "Vault already exists for this protocol ID",
   "Protocol already registered": "This protocol address was already registered",
-  "Caller is missing role": "Permission error — wallet may not be the contract owner",
   "Invalid asset address": "Invalid underlying asset address",
 };
 

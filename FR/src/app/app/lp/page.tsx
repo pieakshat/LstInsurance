@@ -1,48 +1,180 @@
 "use client";
 
 import Link from "next/link";
-import { useAccount } from "@starknet-react/core";
+import { useAccount, useReadContract } from "@starknet-react/core";
 import { useEffect, useState } from "react";
+import type { Abi } from "starknet";
 import type { Protocol } from "@/lib/types";
-import { formatWei, shortenAddress } from "@/lib/utils";
+import { shortenAddress } from "@/lib/utils";
+import { VAULT_ABI } from "@/lib/abis/vault";
 
-// Mock on-chain data per protocol (keyed by protocol_id)
-const MOCK_VAULT_DATA: Record<
-  number,
-  {
-    total_assets: string;
-    locked_liquidity: string;
-    available_liquidity: string;
-    total_active_coverage: string;
-    total_lp_shares: string;
-    current_epoch: number;
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const SHIFT_128 = 128n;
+
+function parseU256(raw: unknown): bigint {
+  if (typeof raw === "bigint") return raw;
+  if (typeof raw === "number") return BigInt(raw);
+  if (typeof raw === "string") return BigInt(raw);
+  if (typeof raw === "object" && raw !== null && "low" in (raw as object)) {
+    const r = raw as { low: unknown; high: unknown };
+    return (BigInt(String(r.high)) << SHIFT_128) | BigInt(String(r.low));
   }
-> = {
-  1: {
-    total_assets: "5000000000000000000",
-    locked_liquidity: "1200000000000000000",
-    available_liquidity: "3800000000000000000",
-    total_active_coverage: "1200000000000000000",
-    total_lp_shares: "4800000000000000000",
-    current_epoch: 3,
-  },
-  2: {
-    total_assets: "8500000000000000000",
-    locked_liquidity: "3200000000000000000",
-    available_liquidity: "5300000000000000000",
-    total_active_coverage: "3200000000000000000",
-    total_lp_shares: "8200000000000000000",
-    current_epoch: 5,
-  },
-  3: {
-    total_assets: "2000000000000000000",
-    locked_liquidity: "400000000000000000",
-    available_liquidity: "1600000000000000000",
-    total_active_coverage: "400000000000000000",
-    total_lp_shares: "1950000000000000000",
-    current_epoch: 2,
-  },
-};
+  return 0n;
+}
+
+function fmtBtc(wei: bigint): string {
+  if (wei === 0n) return "0";
+  const val = Number(wei) / 1e18;
+  if (val < 0.0001) return "<0.0001";
+  return val.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+// ---------------------------------------------------------------------------
+// VaultCard — reads on-chain data per vault
+// ---------------------------------------------------------------------------
+
+function VaultCard({ p }: { p: Protocol }) {
+  const vaultAddr = p.vault_address ?? "";
+  const enabled = !!vaultAddr && vaultAddr !== "0x0";
+
+  const { data: totalAssetsRaw } = useReadContract({
+    abi: VAULT_ABI as Abi,
+    address: vaultAddr as `0x${string}`,
+    functionName: "total_assets",
+    args: [],
+    enabled,
+  });
+
+  const { data: totalSupplyRaw } = useReadContract({
+    abi: VAULT_ABI as Abi,
+    address: vaultAddr as `0x${string}`,
+    functionName: "total_supply",
+    args: [],
+    enabled,
+  });
+
+  const { data: lockedRaw } = useReadContract({
+    abi: VAULT_ABI as Abi,
+    address: vaultAddr as `0x${string}`,
+    functionName: "total_locked_liquidity",
+    args: [],
+    enabled,
+  });
+
+  const { data: availableRaw } = useReadContract({
+    abi: VAULT_ABI as Abi,
+    address: vaultAddr as `0x${string}`,
+    functionName: "available_liquidity",
+    args: [],
+    enabled,
+  });
+
+  const totalAssets = parseU256(totalAssetsRaw);
+  const totalSupply = parseU256(totalSupplyRaw);
+  const locked = parseU256(lockedRaw);
+  const available = parseU256(availableRaw);
+
+  const utilization = totalAssets > 0n ? Number(locked) / Number(totalAssets) : 0;
+  const ratePercent = (p.premium_rate / 100).toFixed(1);
+
+  const dash = enabled ? "—" : "N/A";
+
+  return (
+    <div className="border border-neutral-800 rounded-xl p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-3">
+          <img
+            src={p.logo_url}
+            alt={p.protocol_name}
+            className="w-11 h-11 rounded-full bg-neutral-800"
+          />
+          <div>
+            <h3 className="font-semibold">{p.protocol_name}</h3>
+            <p className="text-xs text-neutral-500">{p.insurance_name}</p>
+          </div>
+        </div>
+        <span className="text-xs px-2.5 py-1 bg-neutral-800 rounded-full text-neutral-300">
+          {p.chain}
+        </span>
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+        <div className="bg-neutral-900 rounded-lg p-3">
+          <p className="text-xs text-neutral-500 mb-1">Total Assets</p>
+          <p className="text-sm font-semibold">
+            {totalAssetsRaw !== undefined ? `${fmtBtc(totalAssets)} BTC-LST` : dash}
+          </p>
+        </div>
+        <div className="bg-neutral-900 rounded-lg p-3">
+          <p className="text-xs text-neutral-500 mb-1">Locked</p>
+          <p className="text-sm font-semibold">
+            {lockedRaw !== undefined ? `${fmtBtc(locked)} BTC-LST` : dash}
+          </p>
+        </div>
+        <div className="bg-neutral-900 rounded-lg p-3">
+          <p className="text-xs text-neutral-500 mb-1">Available</p>
+          <p className="text-sm font-semibold">
+            {availableRaw !== undefined ? `${fmtBtc(available)} BTC-LST` : dash}
+          </p>
+        </div>
+        <div className="bg-neutral-900 rounded-lg p-3">
+          <p className="text-xs text-neutral-500 mb-1">LP Shares</p>
+          <p className="text-sm font-semibold">
+            {totalSupplyRaw !== undefined ? fmtBtc(totalSupply) : dash}
+          </p>
+        </div>
+        <div className="bg-neutral-900 rounded-lg p-3">
+          <p className="text-xs text-neutral-500 mb-1">Premium Rate</p>
+          <p className="text-sm font-semibold">{ratePercent}%</p>
+        </div>
+      </div>
+
+      {/* Utilization bar */}
+      <div>
+        <div className="flex items-center justify-between text-xs mb-1.5">
+          <span className="text-neutral-500">Utilization</span>
+          <span className="text-neutral-300">
+            {enabled ? `${(utilization * 100).toFixed(1)}%` : "—"}
+          </span>
+        </div>
+        <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-white rounded-full transition-all"
+            style={{ width: `${Math.min(utilization * 100, 100)}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-neutral-800">
+        <div className="flex items-center gap-4 text-xs text-neutral-500">
+          <span>
+            Vault:{" "}
+            <span className="font-mono text-neutral-400">
+              {shortenAddress(p.vault_address)}
+            </span>
+          </span>
+          <span>Cap: {fmtBtc(BigInt(p.coverage_cap))} BTC-LST</span>
+        </div>
+        <Link
+          href={`/app/lp/${p._id}`}
+          className="text-xs px-4 py-2 bg-white text-black rounded-lg font-medium hover:bg-neutral-200 transition-colors"
+        >
+          Manage
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export default function LPPage() {
   const { status } = useAccount();
@@ -53,9 +185,7 @@ export default function LPPage() {
     if (status !== "connected") return;
     fetch("/api/protocols")
       .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setProtocols(data);
-      })
+      .then((data) => { if (Array.isArray(data)) setProtocols(data); })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [status]);
@@ -79,10 +209,7 @@ export default function LPPage() {
       {loading ? (
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="border border-neutral-800 rounded-xl p-6 animate-pulse"
-            >
+            <div key={i} className="border border-neutral-800 rounded-xl p-6 animate-pulse">
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-11 h-11 rounded-full bg-neutral-800" />
                 <div className="space-y-2">
@@ -102,130 +229,9 @@ export default function LPPage() {
         <p className="text-neutral-500">No active insurance pools.</p>
       ) : (
         <div className="space-y-4">
-          {protocols.map((p) => {
-            const vault = MOCK_VAULT_DATA[p.protocol_id];
-            if (!vault) return null;
-
-            const ratePercent = (p.premium_rate / 100).toFixed(1);
-            const utilization =
-              Number(vault.locked_liquidity) /
-              Math.max(Number(vault.total_assets), 1);
-
-            return (
-              <div
-                key={p._id}
-                className="border border-neutral-800 rounded-xl p-6"
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between mb-5">
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={p.logo_url}
-                      alt={p.protocol_name}
-                      className="w-11 h-11 rounded-full bg-neutral-800"
-                    />
-                    <div>
-                      <h3 className="font-semibold">{p.protocol_name}</h3>
-                      <p className="text-xs text-neutral-500">
-                        {p.insurance_name}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs px-2.5 py-1 bg-neutral-800 rounded-full text-neutral-300">
-                      Epoch {vault.current_epoch}
-                    </span>
-                    <span className="text-xs px-2.5 py-1 bg-neutral-800 rounded-full text-neutral-300">
-                      {p.chain}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Stats grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-                  <div className="bg-neutral-900 rounded-lg p-3">
-                    <p className="text-xs text-neutral-500 mb-1">Total Assets</p>
-                    <p className="text-sm font-semibold">
-                      {formatWei(vault.total_assets)} BTC-LST
-                    </p>
-                  </div>
-                  <div className="bg-neutral-900 rounded-lg p-3">
-                    <p className="text-xs text-neutral-500 mb-1">
-                      Locked Liquidity
-                    </p>
-                    <p className="text-sm font-semibold">
-                      {formatWei(vault.locked_liquidity)} BTC-LST
-                    </p>
-                  </div>
-                  <div className="bg-neutral-900 rounded-lg p-3">
-                    <p className="text-xs text-neutral-500 mb-1">
-                      Available Liquidity
-                    </p>
-                    <p className="text-sm font-semibold">
-                      {formatWei(vault.available_liquidity)} BTC-LST
-                    </p>
-                  </div>
-                  <div className="bg-neutral-900 rounded-lg p-3">
-                    <p className="text-xs text-neutral-500 mb-1">
-                      Active Coverage
-                    </p>
-                    <p className="text-sm font-semibold">
-                      {formatWei(vault.total_active_coverage)} BTC-LST
-                    </p>
-                  </div>
-                  <div className="bg-neutral-900 rounded-lg p-3">
-                    <p className="text-xs text-neutral-500 mb-1">LP Shares</p>
-                    <p className="text-sm font-semibold">
-                      {formatWei(vault.total_lp_shares)}
-                    </p>
-                  </div>
-                  <div className="bg-neutral-900 rounded-lg p-3">
-                    <p className="text-xs text-neutral-500 mb-1">
-                      Premium Rate
-                    </p>
-                    <p className="text-sm font-semibold">{ratePercent}%</p>
-                  </div>
-                </div>
-
-                {/* Utilization bar */}
-                <div>
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="text-neutral-500">Utilization</span>
-                    <span className="text-neutral-300">
-                      {(utilization * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-white rounded-full transition-all"
-                      style={{ width: `${utilization * 100}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div className="flex items-center justify-between mt-4 pt-4 border-t border-neutral-800">
-                  <div className="flex items-center gap-4 text-xs text-neutral-500">
-                    <span>
-                      Vault:{" "}
-                      <span className="font-mono text-neutral-400">
-                        {shortenAddress(p.vault_address)}
-                      </span>
-                    </span>
-                    <span>
-                      Cap: {formatWei(p.coverage_cap)} BTC-LST
-                    </span>
-                  </div>
-                  <Link
-                    href={`/app/lp/${p._id}`}
-                    className="text-xs px-4 py-2 bg-white text-black rounded-lg font-medium hover:bg-neutral-200 transition-colors"
-                  >
-                    Manage
-                  </Link>
-                </div>
-              </div>
-            );
-          })}
+          {protocols.map((p) => (
+            <VaultCard key={p._id} p={p} />
+          ))}
         </div>
       )}
     </div>

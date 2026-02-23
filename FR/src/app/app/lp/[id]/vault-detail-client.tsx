@@ -2,75 +2,72 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useAccount, useReadContract } from "@starknet-react/core";
+import type { Abi } from "starknet";
 import type { Protocol } from "@/lib/types";
-import { formatWei, shortenAddress } from "@/lib/utils";
+import { shortenAddress } from "@/lib/utils";
+import { VAULT_ABI } from "@/lib/abis/vault";
 import { DepositWithdrawForm } from "./deposit-withdraw-form";
 
-// Same mock vault data — in production this comes from on-chain reads
-const MOCK_VAULT_DATA: Record<
-  number,
-  {
-    total_assets: string;
-    locked_liquidity: string;
-    available_liquidity: string;
-    total_active_coverage: string;
-    total_lp_shares: string;
-    total_payouts: string;
-    deposit_limit: string;
-    current_epoch: number;
-  }
-> = {
-  1: {
-    total_assets: "5000000000000000000",
-    locked_liquidity: "1200000000000000000",
-    available_liquidity: "3800000000000000000",
-    total_active_coverage: "1200000000000000000",
-    total_lp_shares: "4800000000000000000",
-    total_payouts: "150000000000000000",
-    deposit_limit: "10000000000000000000",
-    current_epoch: 3,
-  },
-  2: {
-    total_assets: "8500000000000000000",
-    locked_liquidity: "3200000000000000000",
-    available_liquidity: "5300000000000000000",
-    total_active_coverage: "3200000000000000000",
-    total_lp_shares: "8200000000000000000",
-    total_payouts: "500000000000000000",
-    deposit_limit: "15000000000000000000",
-    current_epoch: 5,
-  },
-  3: {
-    total_assets: "2000000000000000000",
-    locked_liquidity: "400000000000000000",
-    available_liquidity: "1600000000000000000",
-    total_active_coverage: "400000000000000000",
-    total_lp_shares: "1950000000000000000",
-    total_payouts: "0",
-    deposit_limit: "5000000000000000000",
-    current_epoch: 2,
-  },
-};
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-// Mock user position in this vault
-const MOCK_USER_SHARES: Record<number, { shares: string; assets: string }> = {
-  1: { shares: "480000000000000000", assets: "500000000000000000" },
-  2: { shares: "820000000000000000", assets: "850000000000000000" },
-  3: { shares: "0", assets: "0" },
-};
+const SHIFT_128 = 128n;
+const U128_MASK = (1n << SHIFT_128) - 1n;
+
+function parseU256(raw: unknown): bigint {
+  if (typeof raw === "bigint") return raw;
+  if (typeof raw === "number") return BigInt(raw);
+  if (typeof raw === "string") return BigInt(raw);
+  if (typeof raw === "object" && raw !== null && "low" in (raw as object)) {
+    const r = raw as { low: unknown; high: unknown };
+    return (BigInt(String(r.high)) << SHIFT_128) | BigInt(String(r.low));
+  }
+  return 0n;
+}
+
+function fmtBtc(wei: bigint): string {
+  if (wei === 0n) return "0";
+  const val = Number(wei) / 1e18;
+  if (val < 0.0001) return "<0.0001";
+  return val.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+// Encode bigint as {low, high} struct for useReadContract u256 args
+function asU256(v: bigint): { low: bigint; high: bigint } {
+  return { low: v & U128_MASK, high: v >> SHIFT_128 };
+}
+
+// ---------------------------------------------------------------------------
+// Sub-component
+// ---------------------------------------------------------------------------
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-neutral-900 rounded-lg p-3">
+      <p className="text-xs text-neutral-500 mb-1">{label}</p>
+      <p className="text-sm font-semibold">{value}</p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 
 export function VaultDetailClient({ protocolId }: { protocolId: string }) {
+  const { address: userAddress } = useAccount();
   const [protocol, setProtocol] = useState<Protocol | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Fetch protocol from DB ────────────────────────────────────────────────
   useEffect(() => {
     fetch(`/api/protocols/${protocolId}`)
       .then((res) => {
         if (!res.ok)
-          throw new Error(
-            res.status === 404 ? "Vault not found" : "Failed to load"
-          );
+          throw new Error(res.status === 404 ? "Vault not found" : "Failed to load");
         return res.json();
       })
       .then((data) => setProtocol(data))
@@ -78,12 +75,115 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
       .finally(() => setLoading(false));
   }, [protocolId]);
 
-  if (loading) {
+  const vaultAddr = protocol?.vault_address ?? "";
+  const vaultEnabled = !!vaultAddr && vaultAddr !== "0x0";
+
+  // ── On-chain reads ────────────────────────────────────────────────────────
+  const { data: totalAssetsRaw, refetch: refetchAssets } = useReadContract({
+    abi: VAULT_ABI as Abi,
+    address: vaultAddr as `0x${string}`,
+    functionName: "total_assets",
+    args: [],
+    enabled: vaultEnabled,
+  });
+
+  const { data: totalSupplyRaw, refetch: refetchSupply } = useReadContract({
+    abi: VAULT_ABI as Abi,
+    address: vaultAddr as `0x${string}`,
+    functionName: "total_supply",
+    args: [],
+    enabled: vaultEnabled,
+  });
+
+  const { data: lockedRaw, refetch: refetchLocked } = useReadContract({
+    abi: VAULT_ABI as Abi,
+    address: vaultAddr as `0x${string}`,
+    functionName: "total_locked_liquidity",
+    args: [],
+    enabled: vaultEnabled,
+  });
+
+  const { data: availableRaw, refetch: refetchAvailable } = useReadContract({
+    abi: VAULT_ABI as Abi,
+    address: vaultAddr as `0x${string}`,
+    functionName: "available_liquidity",
+    args: [],
+    enabled: vaultEnabled,
+  });
+
+  const { data: depositLimitRaw } = useReadContract({
+    abi: VAULT_ABI as Abi,
+    address: vaultAddr as `0x${string}`,
+    functionName: "get_deposit_limit",
+    args: [],
+    enabled: vaultEnabled,
+  });
+
+  const { data: totalPayoutsRaw, refetch: refetchPayouts } = useReadContract({
+    abi: VAULT_ABI as Abi,
+    address: vaultAddr as `0x${string}`,
+    functionName: "total_payouts",
+    args: [],
+    enabled: vaultEnabled,
+  });
+
+  // User's vault share balance
+  const { data: userSharesRaw, refetch: refetchUserShares } = useReadContract({
+    abi: VAULT_ABI as Abi,
+    address: vaultAddr as `0x${string}`,
+    functionName: "balance_of",
+    args: [userAddress],
+    enabled: vaultEnabled && !!userAddress,
+  });
+
+  // ── Parse raw values ──────────────────────────────────────────────────────
+  const totalAssets = parseU256(totalAssetsRaw);
+  const totalSupply = parseU256(totalSupplyRaw);
+  const locked = parseU256(lockedRaw);
+  const available = parseU256(availableRaw);
+  const depositLimit = parseU256(depositLimitRaw);
+  const totalPayouts = parseU256(totalPayoutsRaw);
+  const userShares = parseU256(userSharesRaw);
+
+  // preview_redeem for user's current asset value
+  const { data: userAssetsRaw, refetch: refetchUserAssets } = useReadContract({
+    abi: VAULT_ABI as Abi,
+    address: vaultAddr as `0x${string}`,
+    functionName: "preview_redeem",
+    args: [asU256(userShares)],
+    enabled: vaultEnabled && userShares > 0n,
+  });
+  const userAssets = parseU256(userAssetsRaw);
+
+  // ── Computed ──────────────────────────────────────────────────────────────
+  const utilization = totalAssets > 0n ? Number(locked) / Number(totalAssets) : 0;
+  const sharePriceWei = totalSupply > 0n ? (totalAssets * BigInt(1e18)) / totalSupply : BigInt(1e18);
+  const sharePriceFloat = Number(sharePriceWei) / 1e18;
+
+  const MAX_U256 = (1n << 256n) - 1n;
+  const depositLimitDisplay =
+    depositLimit >= MAX_U256 / 2n ? "Unlimited" : `${fmtBtc(depositLimit)} BTC-LST`;
+
+  function refetchPosition() {
+    // Small delay to give the RPC node time to index the confirmed block
+    setTimeout(() => {
+      refetchAssets();
+      refetchSupply();
+      refetchLocked();
+      refetchAvailable();
+      refetchPayouts();
+      refetchUserShares();
+      refetchUserAssets();
+    }, 1500);
+  }
+
+  // ── Loading skeleton ──────────────────────────────────────────────────────
+  if (loading || (!protocol && !error)) {
     return (
       <div className="max-w-5xl mx-auto">
         <div className="h-5 w-32 bg-neutral-800 rounded mb-8 animate-pulse" />
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          <div className="lg:col-span-3 space-y-6">
+          <div className="lg:col-span-3">
             <div className="border border-neutral-800 rounded-xl p-6 animate-pulse space-y-4">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-neutral-800" />
@@ -115,26 +215,7 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
     return (
       <div className="max-w-5xl mx-auto text-center py-20">
         <p className="text-neutral-400 mb-4">{error || "Vault not found"}</p>
-        <Link
-          href="/app/lp"
-          className="text-sm text-white underline underline-offset-4 hover:text-neutral-300"
-        >
-          Back to pools
-        </Link>
-      </div>
-    );
-  }
-
-  const vault = MOCK_VAULT_DATA[protocol.protocol_id];
-  const userPos = MOCK_USER_SHARES[protocol.protocol_id];
-  if (!vault) {
-    return (
-      <div className="max-w-5xl mx-auto text-center py-20">
-        <p className="text-neutral-400 mb-4">No vault data available</p>
-        <Link
-          href="/app/lp"
-          className="text-sm text-white underline underline-offset-4 hover:text-neutral-300"
-        >
+        <Link href="/app/lp" className="text-sm text-white underline underline-offset-4 hover:text-neutral-300">
           Back to pools
         </Link>
       </div>
@@ -142,10 +223,6 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
   }
 
   const ratePercent = (protocol.premium_rate / 100).toFixed(1);
-  const utilization =
-    Number(vault.locked_liquidity) / Math.max(Number(vault.total_assets), 1);
-  const sharePrice =
-    Number(vault.total_assets) / Math.max(Number(vault.total_lp_shares), 1);
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -159,8 +236,8 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Left — Vault info */}
         <div className="lg:col-span-3 space-y-6">
-          {/* Header */}
           <div className="border border-neutral-800 rounded-xl p-5">
+            {/* Header */}
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <img
@@ -169,103 +246,70 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
                   className="w-12 h-12 rounded-full bg-neutral-800"
                 />
                 <div>
-                  <h1 className="text-lg font-bold">
-                    {protocol.protocol_name} Vault
-                  </h1>
-                  <p className="text-xs text-neutral-500">
-                    {protocol.insurance_name}
-                  </p>
+                  <h1 className="text-lg font-bold">{protocol.protocol_name} Vault</h1>
+                  <p className="text-xs text-neutral-500">{protocol.insurance_name}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs px-2.5 py-1 bg-neutral-800 rounded-full text-neutral-300">
-                  Epoch {vault.current_epoch}
-                </span>
-                <span className="text-xs px-2.5 py-1 bg-neutral-800 rounded-full text-neutral-300">
-                  {protocol.chain}
-                </span>
-              </div>
+              <span className="text-xs px-2.5 py-1 bg-neutral-800 rounded-full text-neutral-300">
+                {protocol.chain}
+              </span>
             </div>
 
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-              <div className="bg-neutral-900 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 mb-1">Total Assets</p>
-                <p className="text-sm font-semibold">
-                  {formatWei(vault.total_assets)} BTC-LST
-                </p>
-              </div>
-              <div className="bg-neutral-900 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 mb-1">Locked Liquidity</p>
-                <p className="text-sm font-semibold">
-                  {formatWei(vault.locked_liquidity)} BTC-LST
-                </p>
-              </div>
-              <div className="bg-neutral-900 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 mb-1">Available</p>
-                <p className="text-sm font-semibold">
-                  {formatWei(vault.available_liquidity)} BTC-LST
-                </p>
-              </div>
-              <div className="bg-neutral-900 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 mb-1">Active Coverage</p>
-                <p className="text-sm font-semibold">
-                  {formatWei(vault.total_active_coverage)} BTC-LST
-                </p>
-              </div>
-              <div className="bg-neutral-900 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 mb-1">Total LP Shares</p>
-                <p className="text-sm font-semibold">
-                  {formatWei(vault.total_lp_shares)}
-                </p>
-              </div>
-              <div className="bg-neutral-900 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 mb-1">Share Price</p>
-                <p className="text-sm font-semibold">
-                  {sharePrice.toFixed(4)} BTC-LST
-                </p>
-              </div>
+              <Stat
+                label="Total Assets"
+                value={vaultEnabled ? `${fmtBtc(totalAssets)} BTC-LST` : "—"}
+              />
+              <Stat
+                label="Locked Liquidity"
+                value={vaultEnabled ? `${fmtBtc(locked)} BTC-LST` : "—"}
+              />
+              <Stat
+                label="Available"
+                value={vaultEnabled ? `${fmtBtc(available)} BTC-LST` : "—"}
+              />
+              <Stat
+                label="Total LP Shares"
+                value={vaultEnabled ? fmtBtc(totalSupply) : "—"}
+              />
+              <Stat
+                label="Share Price"
+                value={vaultEnabled ? `${sharePriceFloat.toFixed(4)} BTC-LST` : "—"}
+              />
+              <Stat
+                label="Total Payouts"
+                value={vaultEnabled ? `${fmtBtc(totalPayouts)} BTC-LST` : "—"}
+              />
             </div>
 
-            {/* Utilization */}
+            {/* Utilization bar */}
             <div className="mb-4">
               <div className="flex items-center justify-between text-xs mb-1.5">
                 <span className="text-neutral-500">Utilization</span>
-                <span className="text-neutral-300">
-                  {(utilization * 100).toFixed(1)}%
-                </span>
+                <span className="text-neutral-300">{(utilization * 100).toFixed(1)}%</span>
               </div>
               <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-white rounded-full transition-all"
-                  style={{ width: `${utilization * 100}%` }}
+                  style={{ width: `${Math.min(utilization * 100, 100)}%` }}
                 />
               </div>
             </div>
 
             {/* Extra info */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-neutral-800">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-4 border-t border-neutral-800">
               <div>
                 <p className="text-xs text-neutral-500 mb-0.5">Premium Rate</p>
                 <p className="text-sm font-medium">{ratePercent}%</p>
               </div>
               <div>
                 <p className="text-xs text-neutral-500 mb-0.5">Coverage Cap</p>
-                <p className="text-sm font-medium">
-                  {formatWei(protocol.coverage_cap)} BTC-LST
-                </p>
+                <p className="text-sm font-medium">{fmtBtc(BigInt(protocol.coverage_cap))} BTC-LST</p>
               </div>
               <div>
                 <p className="text-xs text-neutral-500 mb-0.5">Deposit Limit</p>
-                <p className="text-sm font-medium">
-                  {formatWei(vault.deposit_limit)} BTC-LST
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-neutral-500 mb-0.5">Total Payouts</p>
-                <p className="text-sm font-medium">
-                  {formatWei(vault.total_payouts)} BTC-LST
-                </p>
+                <p className="text-sm font-medium">{vaultEnabled ? depositLimitDisplay : "—"}</p>
               </div>
             </div>
 
@@ -287,33 +331,20 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
           </div>
 
           {/* Your Position */}
-          {userPos && Number(userPos.shares) > 0 && (
+          {userAddress && userShares > 0n && (
             <div className="border border-neutral-800 rounded-xl p-5">
               <h2 className="text-base font-semibold mb-4">Your Position</h2>
               <div className="grid grid-cols-3 gap-3">
-                <div className="bg-neutral-900 rounded-lg p-3">
-                  <p className="text-xs text-neutral-500 mb-1">Your Shares</p>
-                  <p className="text-sm font-semibold">
-                    {formatWei(userPos.shares)}
-                  </p>
-                </div>
-                <div className="bg-neutral-900 rounded-lg p-3">
-                  <p className="text-xs text-neutral-500 mb-1">Current Value</p>
-                  <p className="text-sm font-semibold">
-                    {formatWei(userPos.assets)} BTC-LST
-                  </p>
-                </div>
-                <div className="bg-neutral-900 rounded-lg p-3">
-                  <p className="text-xs text-neutral-500 mb-1">Pool Share</p>
-                  <p className="text-sm font-semibold">
-                    {(
-                      (Number(userPos.shares) /
-                        Math.max(Number(vault.total_lp_shares), 1)) *
-                      100
-                    ).toFixed(2)}
-                    %
-                  </p>
-                </div>
+                <Stat label="Your Shares" value={fmtBtc(userShares)} />
+                <Stat label="Current Value" value={`${fmtBtc(userAssets)} BTC-LST`} />
+                <Stat
+                  label="Pool Share"
+                  value={
+                    totalSupply > 0n
+                      ? `${((Number(userShares) / Number(totalSupply)) * 100).toFixed(2)}%`
+                      : "0%"
+                  }
+                />
               </div>
             </div>
           )}
@@ -323,11 +354,12 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
         <div className="lg:col-span-2">
           <div className="lg:sticky lg:top-8">
             <DepositWithdrawForm
-              protocol={protocol}
-              sharePrice={sharePrice}
-              availableLiquidity={vault.available_liquidity}
-              userShares={userPos?.shares ?? "0"}
-              userAssets={userPos?.assets ?? "0"}
+              vaultAddress={vaultAddr}
+              userAddress={userAddress}
+              totalAssets={totalAssets}
+              totalSupply={totalSupply}
+              availableLiquidity={available}
+              onTxSuccess={refetchPosition}
             />
           </div>
         </div>
