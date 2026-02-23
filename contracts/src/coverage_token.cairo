@@ -35,6 +35,8 @@ pub trait ICoverageToken<TContractState> {
     fn coverage_amount(self: @TContractState, token_id: u256) -> u256;
     fn coverage_protocol(self: @TContractState, token_id: u256) -> u256;
 
+    fn get_tokens_of(self: @TContractState, owner: starknet::ContractAddress) -> Array<u256>;
+
     fn set_minter(ref self: TContractState, account: starknet::ContractAddress);
     fn set_burner(ref self: TContractState, account: starknet::ContractAddress);
 }
@@ -97,6 +99,10 @@ pub mod CoverageToken {
         upgradeable: UpgradeableComponent::Storage,
         coverage: Map<u256, CoverageNode>,
         next_token_id: u256,
+        // Per-owner token index (ERC721Enumerable pattern)
+        owner_token_count: Map<ContractAddress, u64>,
+        owner_token_at: Map<ContractAddress, Map<u64, u256>>,  // (owner, idx) -> token_id
+        token_owner_index: Map<u256, u64>,                     // token_id -> idx in owner list
     }
 
     #[event]
@@ -198,6 +204,12 @@ pub mod CoverageToken {
 
             self.erc721.mint(to, token_id);
 
+            // Update owner index
+            let idx = self.owner_token_count.entry(to).read();
+            self.owner_token_at.entry(to).entry(idx).write(token_id);
+            self.token_owner_index.entry(token_id).write(idx);
+            self.owner_token_count.entry(to).write(idx + 1);
+
             let node = self.coverage.entry(token_id);
             node.protocol_id.write(protocol_id);
             node.coverage_amount.write(coverage_amount);
@@ -218,6 +230,19 @@ pub mod CoverageToken {
         fn burn_coverage(ref self: ContractState, token_id: u256) {
             self.access_control.assert_only_role(BURNER_ROLE);
             assert(self.erc721.exists(token_id), 'Token does not exist');
+
+            // Swap-and-pop: move last token into the burned slot, shrink count
+            let owner = self.erc721.ERC721_owners.entry(token_id).read();
+            let burn_idx = self.token_owner_index.entry(token_id).read();
+            let last_idx = self.owner_token_count.entry(owner).read() - 1;
+            if burn_idx != last_idx {
+                let last_token = self.owner_token_at.entry(owner).entry(last_idx).read();
+                self.owner_token_at.entry(owner).entry(burn_idx).write(last_token);
+                self.token_owner_index.entry(last_token).write(burn_idx);
+            }
+            self.owner_token_at.entry(owner).entry(last_idx).write(0);
+            self.token_owner_index.entry(token_id).write(0);
+            self.owner_token_count.entry(owner).write(last_idx);
 
             self.erc721.burn(token_id);
 
@@ -260,6 +285,18 @@ pub mod CoverageToken {
         fn coverage_protocol(self: @ContractState, token_id: u256) -> u256 {
             assert(self.erc721.exists(token_id), 'Token does not exist');
             self.coverage.entry(token_id).protocol_id.read()
+        }
+
+        fn get_tokens_of(self: @ContractState, owner: ContractAddress) -> Array<u256> {
+            let count = self.owner_token_count.entry(owner).read();
+            let mut result: Array<u256> = ArrayTrait::new();
+            let mut i: u64 = 0;
+            loop {
+                if i >= count { break; }
+                result.append(self.owner_token_at.entry(owner).entry(i).read());
+                i += 1;
+            };
+            result
         }
 
         fn set_minter(ref self: ContractState, account: ContractAddress) {

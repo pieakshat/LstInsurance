@@ -1,17 +1,12 @@
 "use client";
 
-import { useAccount, useProvider, useReadContract } from "@starknet-react/core";
-import { useEffect } from "react";
+import { useAccount, useReadContract } from "@starknet-react/core";
 import type { Abi } from "starknet";
-import { hash, num } from "starknet";
 import { useTxStep } from "./use-tx-step";
 import { PREMIUM_MODULE_ABI } from "../abis/premium-module";
 import { ERC20_ABI } from "../abis/erc20";
 import { VAULT_ABI } from "../abis/vault";
-import { TOKENS, CONTRACTS } from "../contracts";
-import { addTokenId } from "../token-store";
-
-const COVERAGE_MINTED_SELECTOR = hash.getSelectorFromName("CoverageMinted");
+import { TOKENS } from "../contracts";
 
 const U128_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFn;
 const SHIFT_128 = 128n;
@@ -44,7 +39,6 @@ export function useBuyCoverage({
   durationSecs: number;
 }) {
   const { address: accountAddress } = useAccount();
-  const { provider } = useProvider();
   const txStep = useTxStep();
 
   const enabled =
@@ -85,42 +79,6 @@ export function useBuyCoverage({
   const balanceWei = parseU256(balanceRaw);
   const availableLiquidityWei = parseU256(liquidityRaw);
   const hasEnoughLiquidity = availableLiquidityWei >= coverageAmountWei;
-
-  // When buy_coverage confirms, fetch the receipt directly from the RPC and
-  // parse the CoverageMinted event to extract + store the token ID.
-  useEffect(() => {
-    if (txStep.status !== "done" || !txStep.txHash || !accountAddress) return;
-
-    const txHash = txStep.txHash;
-
-    provider.getTransactionReceipt(txHash).then((receipt) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const events: Array<{ from_address: string; keys: string[] }> =
-        (receipt as any).events ?? [];
-
-      console.log("[useBuyCoverage] receipt events:", events);
-
-      for (const ev of events) {
-        // Normalize hex before comparing to handle different zero-padding
-        const fromAddr = num.toHex(ev.from_address ?? "0x0");
-        const evKey0  = num.toHex(ev.keys?.[0] ?? "0x0");
-
-        if (
-          fromAddr === num.toHex(CONTRACTS.coverageToken) &&
-          evKey0   === num.toHex(COVERAGE_MINTED_SELECTOR)
-        ) {
-          // keys: [selector, token_id_low, token_id_high, user]
-          const low = BigInt(ev.keys[1] ?? "0");
-          const high = BigInt(ev.keys[2] ?? "0");
-          const tokenId = Number((high << 128n) | low);
-          console.log("[useBuyCoverage] stored tokenId:", tokenId);
-          addTokenId(accountAddress, tokenId);
-          break;
-        }
-      }
-    }).catch((err) => console.error("[useBuyCoverage] receipt fetch failed:", err));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [txStep.status, txStep.txHash]);
 
   function execute() {
     if (!accountAddress || !enabled || premiumWei <= 0n) return;

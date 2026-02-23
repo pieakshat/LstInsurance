@@ -262,6 +262,22 @@ export const COVERAGE_TOKEN_ABI = [
       },
       {
         "type": "function",
+        "name": "get_tokens_of",
+        "inputs": [
+          {
+            "name": "owner",
+            "type": "core::starknet::contract_address::ContractAddress"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "core::array::Array::<core::integer::u256>"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
         "name": "set_minter",
         "inputs": [
           {

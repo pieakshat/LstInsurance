@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { useAccount, useProvider } from "@starknet-react/core";
-import { Contract } from "starknet";
+import { useAccount, useProvider, useReadContract } from "@starknet-react/core";
+import { Contract, type Abi } from "starknet";
 import type { CoveragePosition, Protocol } from "@/lib/types";
 import { formatWei, formatDuration } from "@/lib/utils";
 import { COVERAGE_TOKEN_ABI } from "@/lib/abis/coverage-token";
 import { CONTRACTS } from "@/lib/contracts";
-import { getTokenIds } from "@/lib/token-store";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -39,11 +38,8 @@ function timeRemaining(endTime: number): string {
 
 function formatDateTime(unix: number): string {
   return new Date(unix * 1000).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+    month: "short", day: "numeric", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
   });
 }
 
@@ -55,21 +51,30 @@ export function YourCovers() {
   const { address } = useAccount();
   const { provider } = useProvider();
   const [covers, setCovers] = useState<CoveragePosition[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [coverLoading, setCoverLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (!address || !provider) { setLoading(false); return; }
+  // Single contract call — returns all token IDs owned by this address
+  const { data: tokenIdsRaw, isLoading: idsLoading } = useReadContract({
+    abi: COVERAGE_TOKEN_ABI as Abi,
+    address: CONTRACTS.coverageToken as `0x${string}`,
+    functionName: "get_tokens_of",
+    args: [address],
+    enabled: !!address,
+  });
 
-    const tokenIds = getTokenIds(address);
-    if (tokenIds.length === 0) { setLoading(false); return; }
+  // Whenever the token ID list changes, fetch full coverage data for each token
+  useEffect(() => {
+    if (!tokenIdsRaw || !provider) return;
+
+    const tokenIds = (tokenIdsRaw as unknown[]).map((id) => parseU256(id));
+    if (tokenIds.length === 0) { setCovers([]); return; }
 
     let cancelled = false;
+    setCoverLoading(true);
 
-    async function loadCovers() {
-      setLoading(true);
+    async function load() {
       try {
-        // Fetch protocol list to resolve names / logos
         const protocolsRes = await fetch("/api/protocols");
         const protocols: Protocol[] = protocolsRes.ok ? await protocolsRes.json() : [];
         const protocolMap = new Map(protocols.map((p) => [p.protocol_id, p]));
@@ -79,11 +84,11 @@ export function YourCovers() {
         const positions = await Promise.all(
           tokenIds.map(async (tokenId): Promise<CoveragePosition | null> => {
             try {
-              const cov = await contract.get_coverage(BigInt(tokenId));
+              const cov = await contract.get_coverage(tokenId);
               const protocolId = Number(parseU256(cov.protocol_id));
               const protocol = protocolMap.get(protocolId);
               return {
-                token_id: tokenId,
+                token_id: Number(tokenId),
                 protocol_id: protocolId,
                 protocol_name: protocol?.protocol_name ?? `Protocol #${protocolId}`,
                 logo_url: protocol?.logo_url ?? "",
@@ -92,29 +97,23 @@ export function YourCovers() {
                 start_time: Number(cov.start_time),
                 end_time: Number(cov.end_time),
               };
-            } catch {
-              return null; // token was burned or doesn't exist
-            }
+            } catch { return null; }
           }),
         );
 
-        if (!cancelled) {
-          setCovers(positions.filter((p): p is CoveragePosition => p !== null));
-        }
-      } catch (err) {
-        console.error("[YourCovers] Failed to load:", err);
+        if (!cancelled) setCovers(positions.filter((p): p is CoveragePosition => p !== null));
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setCoverLoading(false);
       }
     }
 
-    loadCovers();
+    load();
     return () => { cancelled = true; };
-  }, [address, provider]);
+  }, [tokenIdsRaw, provider]);
 
   // ── Loading state ──────────────────────────────────────────────────────────
 
-  if (loading) {
+  if (idsLoading || coverLoading) {
     return (
       <div className="space-y-3">
         {[1, 2].map((i) => (
@@ -139,9 +138,7 @@ export function YourCovers() {
     return (
       <div className="text-center py-20">
         <p className="text-neutral-500 mb-2">No coverage positions yet</p>
-        <p className="text-sm text-neutral-600">
-          Purchase cover from the Buy Cover tab to get started.
-        </p>
+        <p className="text-sm text-neutral-600">Purchase cover from the Buy Cover tab to get started.</p>
       </div>
     );
   }
@@ -156,44 +153,24 @@ export function YourCovers() {
         return (
           <div
             key={cover.token_id}
-            className={`border rounded-xl transition-colors ${
-              isActive ? "border-neutral-800" : "border-neutral-800/50 opacity-60"
-            }`}
+            className={`border rounded-xl transition-colors ${isActive ? "border-neutral-800" : "border-neutral-800/50 opacity-60"}`}
           >
-            <button
-              onClick={() => setExpandedId(isExpanded ? null : cover.token_id)}
-              className="w-full text-left p-5"
-            >
+            <button onClick={() => setExpandedId(isExpanded ? null : cover.token_id)} className="w-full text-left p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  {cover.logo_url ? (
-                    <img
-                      src={cover.logo_url}
-                      alt={cover.protocol_name}
-                      className="w-9 h-9 rounded-full bg-neutral-800"
-                    />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-neutral-800" />
-                  )}
+                  {cover.logo_url
+                    ? <img src={cover.logo_url} alt={cover.protocol_name} className="w-9 h-9 rounded-full bg-neutral-800" />
+                    : <div className="w-9 h-9 rounded-full bg-neutral-800" />}
                   <div>
                     <p className="font-medium text-sm">{cover.protocol_name}</p>
                     <p className="text-xs text-neutral-500">Token #{cover.token_id}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span
-                    className={`text-xs px-2.5 py-1 rounded-full ${
-                      isActive
-                        ? "bg-emerald-500/10 text-emerald-400"
-                        : "bg-neutral-800 text-neutral-500"
-                    }`}
-                  >
+                  <span className={`text-xs px-2.5 py-1 rounded-full ${isActive ? "bg-emerald-500/10 text-emerald-400" : "bg-neutral-800 text-neutral-500"}`}>
                     {isActive ? "Active" : "Expired"}
                   </span>
-                  <svg
-                    className={`w-4 h-4 text-neutral-500 transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                  >
+                  <svg className={`w-4 h-4 text-neutral-500 transition-transform ${isExpanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
@@ -210,15 +187,11 @@ export function YourCovers() {
                 </div>
                 <div>
                   <p className="text-xs text-neutral-500 mb-0.5">Duration</p>
-                  <p className="font-medium">
-                    {formatDuration(cover.end_time - cover.start_time)}
-                  </p>
+                  <p className="font-medium">{formatDuration(cover.end_time - cover.start_time)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-neutral-500 mb-0.5">Time Left</p>
-                  <p className={`font-medium ${!isActive ? "text-neutral-500" : ""}`}>
-                    {timeRemaining(cover.end_time)}
-                  </p>
+                  <p className={`font-medium ${!isActive ? "text-neutral-500" : ""}`}>{timeRemaining(cover.end_time)}</p>
                 </div>
               </div>
             </button>
@@ -240,22 +213,13 @@ export function YourCovers() {
                       <p className="font-medium">{cover.protocol_id}</p>
                     </div>
                   </div>
-
                   <div className="flex gap-2">
                     {isActive && (
-                      <Link
-                        href={`/app/submit-claim?tokenId=${cover.token_id}`}
-                        className="text-xs px-4 py-2 bg-white text-black rounded-lg font-medium hover:bg-neutral-200 transition-colors"
-                      >
+                      <Link href={`/app/submit-claim?tokenId=${cover.token_id}`} className="text-xs px-4 py-2 bg-white text-black rounded-lg font-medium hover:bg-neutral-200 transition-colors">
                         File a Claim
                       </Link>
                     )}
-                    <a
-                      href={`https://sepolia.voyager.online/contract/${CONTRACTS.coverageToken}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs px-4 py-2 border border-neutral-700 rounded-lg hover:border-neutral-500 transition-colors"
-                    >
+                    <a href={`https://sepolia.voyager.online/contract/${CONTRACTS.coverageToken}`} target="_blank" rel="noopener noreferrer" className="text-xs px-4 py-2 border border-neutral-700 rounded-lg hover:border-neutral-500 transition-colors">
                       View on Explorer &nearr;
                     </a>
                   </div>
