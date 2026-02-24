@@ -1,0 +1,22 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@layerzerolabs/protocol-starknet-v2':
+        specifier: ^0.2.34
+        version: 0.2.34
+
+packages:
+
+  '@layerzerolabs/protocol-starknet-v2@0.2.34':
+    resolution: {integrity: sha512-EY8v7gPC2wo6rPU2c/oFZCDwO1Y9u5sVCy+PfS1Afih9OPXp3lqr3rvk7brJP0HzvBofGctot0Y3DcRmPY7gKg==}
+
+snapshots:
+
+  '@layerzerolabs/protocol-starknet-v2@0.2.34': {}
