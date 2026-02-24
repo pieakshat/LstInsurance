@@ -14,20 +14,13 @@ export function useTxStep() {
   const [status, setStatus] = useState<TxStatus>("idle");
   const { toast } = useToast();
 
-  const { sendAsync, error: sendError } = useSendTransaction({});
+  const { sendAsync } = useSendTransaction({});
 
   const { data: receipt } = useTransactionReceipt({
     hash: txHash,
     refetchInterval: 2000,
     enabled: !!txHash && status === "confirming",
   });
-
-  useEffect(() => {
-    if (sendError && status === "pending") {
-      setStatus("error");
-      toast(parseContractError(sendError), "error");
-    }
-  }, [sendError, status, toast]);
 
   useEffect(() => {
     if (!receipt || status !== "confirming") return;

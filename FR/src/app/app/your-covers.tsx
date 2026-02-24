@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useAccount, useProvider, useReadContract } from "@starknet-react/core";
-import { Contract, type Abi } from "starknet";
+import type { Abi } from "starknet";
 import type { CoveragePosition, Protocol } from "@/lib/types";
 import { formatWei, formatDuration } from "@/lib/utils";
 import { COVERAGE_TOKEN_ABI } from "@/lib/abis/coverage-token";
@@ -14,7 +14,9 @@ import { CONTRACTS } from "@/lib/contracts";
 // ---------------------------------------------------------------------------
 
 const SHIFT_128 = 128n;
+const U128_MASK = (1n << SHIFT_128) - 1n;
 
+// For useReadContract results (bigint | {low,high} | string)
 function parseU256(raw: unknown): bigint {
   if (typeof raw === "bigint") return raw;
   if (typeof raw === "number") return BigInt(raw);
@@ -24,6 +26,13 @@ function parseU256(raw: unknown): bigint {
     return (BigInt(String(r.high)) << SHIFT_128) | BigInt(String(r.low));
   }
   return 0n;
+}
+
+// For provider.callContract results (raw felt strings — u256 = [low, high])
+function parseU256RPC(felts: string[], offset = 0): bigint {
+  const low = BigInt(felts[offset] ?? "0");
+  const high = BigInt(felts[offset + 1] ?? "0");
+  return (high << SHIFT_128) | low;
 }
 
 function getStatus(cover: CoveragePosition): "active" | "expired" {
@@ -79,25 +88,32 @@ export function YourCovers() {
         const protocols: Protocol[] = protocolsRes.ok ? await protocolsRes.json() : [];
         const protocolMap = new Map(protocols.map((p) => [p.protocol_id, p]));
 
-        const contract = new Contract(COVERAGE_TOKEN_ABI, CONTRACTS.coverageToken, provider);
-
         const positions = await Promise.all(
           tokenIds.map(async (tokenId): Promise<CoveragePosition | null> => {
             try {
-              const cov = await contract.get_coverage(tokenId);
-              const protocolId = Number(parseU256(cov.protocol_id));
+              // Encode tokenId as u256 calldata [low, high]
+              const felts = await provider.callContract({
+                contractAddress: CONTRACTS.coverageToken,
+                entrypoint: "get_coverage",
+                calldata: [String(tokenId & U128_MASK), String(tokenId >> SHIFT_128)],
+              }, "latest");
+              // CoveragePosition layout: protocol_id(2) coverage_amount(2) start_time(1) end_time(1) premium_paid(2)
+              const protocolId = Number(parseU256RPC(felts, 0));
               const protocol = protocolMap.get(protocolId);
               return {
                 token_id: Number(tokenId),
                 protocol_id: protocolId,
                 protocol_name: protocol?.protocol_name ?? `Protocol #${protocolId}`,
                 logo_url: protocol?.logo_url ?? "",
-                coverage_amount: String(parseU256(cov.coverage_amount)),
-                premium_paid: String(parseU256(cov.premium_paid)),
-                start_time: Number(cov.start_time),
-                end_time: Number(cov.end_time),
+                coverage_amount: String(parseU256RPC(felts, 2)),
+                start_time: Number(BigInt(felts[4])),
+                end_time: Number(BigInt(felts[5])),
+                premium_paid: String(parseU256RPC(felts, 6)),
               };
-            } catch { return null; }
+            } catch (err) {
+              console.error("get_coverage failed for token", tokenId, err);
+              return null;
+            }
           }),
         );
 
