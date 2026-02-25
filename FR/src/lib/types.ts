@@ -7,6 +7,7 @@ export interface Protocol {
   description: string;
   vault_address: string;
   premium_module_address: string;
+  claims_manager_address: string;
   coverage_cap: string;
   premium_rate: number;
   chain: string;

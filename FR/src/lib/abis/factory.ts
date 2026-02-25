@@ -117,6 +117,18 @@ export const FACTORY_ABI = [
       },
       {
         "type": "function",
+        "name": "set_claims_class_hash",
+        "inputs": [
+          {
+            "name": "new_hash",
+            "type": "core::starknet::class_hash::ClassHash"
+          }
+        ],
+        "outputs": [],
+        "state_mutability": "external"
+      },
+      {
+        "type": "function",
         "name": "set_registry",
         "inputs": [
           {
@@ -181,6 +193,22 @@ export const FACTORY_ABI = [
       {
         "type": "function",
         "name": "get_premium_module",
+        "inputs": [
+          {
+            "name": "protocol_id",
+            "type": "core::integer::u256"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "core::starknet::contract_address::ContractAddress"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_claims_manager",
         "inputs": [
           {
             "name": "protocol_id",
@@ -540,6 +568,11 @@ export const FACTORY_ABI = [
         "kind": "data"
       },
       {
+        "name": "claims_manager",
+        "type": "core::starknet::contract_address::ContractAddress",
+        "kind": "data"
+      },
+      {
         "name": "asset",
         "type": "core::starknet::contract_address::ContractAddress",
         "kind": "data"
@@ -604,6 +637,23 @@ export const FACTORY_ABI = [
         "name": "PremiumClassUpdated",
         "type": "contracts::vault_factory::InsuranceVaultFactory::PremiumClassUpdated",
         "kind": "nested"
+      },
+      {
+        "name": "ClaimsClassUpdated",
+        "type": "contracts::vault_factory::InsuranceVaultFactory::ClaimsClassUpdated",
+        "kind": "nested"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "contracts::vault_factory::InsuranceVaultFactory::ClaimsClassUpdated",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "new_class_hash",
+        "type": "core::starknet::class_hash::ClassHash",
+        "kind": "data"
       }
     ]
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAccount, useReadContract } from "@starknet-react/core";
+import { useAccount, useReadContract, useProvider } from "@starknet-react/core";
 import type { Abi } from "starknet";
 import { useToast } from "../toast";
 import { REGISTRY_ABI } from "@/lib/abis/registry";
@@ -48,7 +48,7 @@ const STORAGE_KEY = "strk-insurance-admin-config";
 const DEFAULT_CONFIG: SystemConfig = {
   registry:        "0x063496b0409b179d6ec465f6e0c9936a41d3a71d4e4e0f3f743d78ca258a17cb",
   factory:         "0x05a1cf3518bb1ea5e9eb9c8d62c58087062d3f566c65849f2343eeaed8df4359",
-  coverageToken:   "0x07cf16f16fe7e96d66cf063739bf8d8f078ca944a271723dca5403f8c946ff5d",
+  coverageToken:   "0x05b4b86e8073af4ad322233f9ef614cab93eb721cb72feca4d8c605913c9a2a3",
   underlyingAsset: "0x02579f9dc11305ff5b300babde1ee79176a6d58c0f0a022c992ce3f8195b65ee",
   premiumAsset:    "0x04621e68e8784928870a619f405e807cf061096f301eb8b7c1fee7dc35bef91a",
 };
@@ -256,6 +256,7 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
 
 export function AdminWizard() {
   const { status: accountStatus, address: accountAddress } = useAccount();
+  const { provider } = useProvider();
   const { toast } = useToast();
 
   const [step, setStep] = useState<Step>(0);
@@ -281,11 +282,18 @@ export function AdminWizard() {
   const [protocolId, setProtocolId] = useState<string>("");
   const [vaultAddress, setVaultAddress] = useState<string>("");
   const [premiumModuleAddress, setPremiumModuleAddress] = useState<string>("");
+  const [claimsManagerAddress, setClaimsManagerAddress] = useState<string>("");
 
   // Step 3: Permission wiring completion flags
   const [minterDone, setMinterDone] = useState(false);
   const [depositLimitDone, setDepositLimitDone] = useState(false);
   const [coverageManagerDone, setCoverageManagerDone] = useState(false);
+  const [claimsManagerDone, setClaimsManagerDone] = useState(false);
+  const [burnerDone, setBurnerDone] = useState(false);
+  const [governorDone, setGovernorDone] = useState(false);
+
+  // Step 3: governor address input (defaults to connected wallet)
+  const [governorAddress, setGovernorAddress] = useState("");
 
   // Step 4: DB save
   const [saved, setSaved] = useState(false);
@@ -296,7 +304,21 @@ export function AdminWizard() {
   const setMinterTx = useTxStep();
   const setDepositLimitTx = useTxStep();
   const setCoverageManagerTx = useTxStep();
+  const setClaimsManagerTx = useTxStep();
+  const setBurnerTx = useTxStep();
+  const addGovernorTx = useTxStep();
   const expireTx = useTxStep();
+  const claimActionTx = useTxStep();
+
+  // Claims review maintenance state
+  const [reviewProtocolIdx, setReviewProtocolIdx] = useState(0);
+  const [reviewProtocols, setReviewProtocols] = useState<Array<{ name: string; cm: string }>>([]);
+  const [reviewClaims, setReviewClaims] = useState<Array<{
+    claim_id: number; token_id: number; claimant: string;
+    coverage_amount: string; status: number; submitted_at: number;
+  }>>([]);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [actioningClaimId, setActioningClaimId] = useState<number | null>(null);
 
   // Expire coverage tool state
   const [expirePmAddress, setExpirePmAddress] = useState("");
@@ -359,15 +381,24 @@ export function AdminWizard() {
     enabled: !!config.factory && !!protocolId && createVaultTx.status === "done",
   });
 
+  const { data: cmAddr, refetch: refetchCM } = useReadContract({
+    abi: FACTORY_ABI as Abi,
+    address: config.factory as `0x${string}`,
+    functionName: "get_claims_manager",
+    args: [{ low: pidNum, high: 0 }],
+    enabled: !!config.factory && !!protocolId && createVaultTx.status === "done",
+  });
+
   useEffect(() => {
     if (createVaultTx.status === "done") {
       const timer = setTimeout(() => {
         refetchVault();
         refetchPM();
+        refetchCM();
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [createVaultTx.status, refetchVault, refetchPM]);
+  }, [createVaultTx.status, refetchVault, refetchPM, refetchCM]);
 
   useEffect(() => {
     if (vaultAddr && createVaultTx.status === "done" && !vaultAddress) {
@@ -381,6 +412,12 @@ export function AdminWizard() {
     }
   }, [pmAddr, createVaultTx.status, premiumModuleAddress]);
 
+  useEffect(() => {
+    if (cmAddr && createVaultTx.status === "done" && !claimsManagerAddress) {
+      setClaimsManagerAddress(toHexAddr(cmAddr));
+    }
+  }, [cmAddr, createVaultTx.status, claimsManagerAddress]);
+
   // Track permission tx completions
   useEffect(() => {
     if (setMinterTx.status === "done") setMinterDone(true);
@@ -391,6 +428,35 @@ export function AdminWizard() {
   useEffect(() => {
     if (setCoverageManagerTx.status === "done") setCoverageManagerDone(true);
   }, [setCoverageManagerTx.status]);
+  useEffect(() => {
+    if (setClaimsManagerTx.status === "done") setClaimsManagerDone(true);
+  }, [setClaimsManagerTx.status]);
+  useEffect(() => {
+    if (setBurnerTx.status === "done") setBurnerDone(true);
+  }, [setBurnerTx.status]);
+  useEffect(() => {
+    if (addGovernorTx.status === "done") setGovernorDone(true);
+  }, [addGovernorTx.status]);
+
+  // Default governor address to connected wallet
+  useEffect(() => {
+    if (accountAddress && !governorAddress) setGovernorAddress(accountAddress);
+  }, [accountAddress, governorAddress]);
+
+  // Load protocols for claims review
+  useEffect(() => {
+    fetch("/api/protocols")
+      .then((r) => r.json())
+      .then((data: Array<{ protocol_name: string; claims_manager_address?: string }>) => {
+        if (!Array.isArray(data)) return;
+        setReviewProtocols(
+          data
+            .filter((p) => p.claims_manager_address && p.claims_manager_address !== "0x0")
+            .map((p) => ({ name: p.protocol_name, cm: p.claims_manager_address! }))
+        );
+      })
+      .catch(console.error);
+  }, []);
 
   // ---- Guards ----
   if (accountStatus !== "connected") {
@@ -490,6 +556,101 @@ export function AdminWizard() {
     ]);
   }
 
+  function handleSetClaimsManager() {
+    setClaimsManagerTx.execute([
+      {
+        contractAddress: vaultAddress,
+        entrypoint: "set_claims_manager",
+        calldata: [claimsManagerAddress],
+      },
+    ]);
+  }
+
+  function handleSetBurner() {
+    setBurnerTx.execute([
+      {
+        contractAddress: config.coverageToken,
+        entrypoint: "set_burner",
+        calldata: [claimsManagerAddress],
+      },
+    ]);
+  }
+
+  function handleAddGovernor() {
+    if (!isValidAddress(governorAddress)) { toast("Enter a valid governor address", "error"); return; }
+    addGovernorTx.execute([
+      {
+        contractAddress: claimsManagerAddress,
+        entrypoint: "add_governor",
+        calldata: [governorAddress],
+      },
+    ]);
+  }
+
+  async function handleLoadClaims() {
+    const selected = reviewProtocols[reviewProtocolIdx];
+    if (!selected || !provider) return;
+    setReviewLoading(true);
+    setReviewClaims([]);
+    try {
+      const SHIFT = 128n;
+      function parseU256r(felts: string[], off = 0): bigint {
+        return (BigInt(felts[off + 1] ?? "0") << SHIFT) | BigInt(felts[off] ?? "0");
+      }
+
+      const nextFelts = await provider.callContract({
+        contractAddress: selected.cm,
+        entrypoint: "next_claim_id",
+        calldata: [],
+      }, "latest");
+      const nextId = Number(parseU256r(nextFelts, 0));
+      if (nextId <= 1) { setReviewClaims([]); return; }
+
+      const results = await Promise.all(
+        Array.from({ length: nextId - 1 }, (_, i) => i + 1).map(async (id) => {
+          try {
+            const felts = await provider.callContract({
+              contractAddress: selected.cm,
+              entrypoint: "get_claim",
+              calldata: [String(id), "0"],
+            }, "latest");
+            return {
+              claim_id: id,
+              token_id: Number(parseU256r(felts, 3)),
+              claimant: "0x" + BigInt(felts[2]).toString(16),
+              coverage_amount: String(parseU256r(felts, 7)),
+              status: Number(BigInt(felts[9])),
+              submitted_at: Number(BigInt(felts[10])),
+            };
+          } catch { return null; }
+        })
+      );
+      setReviewClaims(results.filter((r): r is NonNullable<typeof r> => r !== null));
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to load claims", "error");
+    } finally {
+      setReviewLoading(false);
+    }
+  }
+
+  function handleApproveClaim(claimId: number, cmAddress: string) {
+    setActioningClaimId(claimId);
+    claimActionTx.execute([{
+      contractAddress: cmAddress,
+      entrypoint: "approve_claim",
+      calldata: [String(claimId), "0"],
+    }]);
+  }
+
+  function handleRejectClaim(claimId: number, cmAddress: string) {
+    setActioningClaimId(claimId);
+    claimActionTx.execute([{
+      contractAddress: cmAddress,
+      entrypoint: "reject_claim",
+      calldata: [String(claimId), "0"],
+    }]);
+  }
+
   function handleExpireCoverage() {
     if (!expirePmAddress || !isValidAddress(expirePmAddress)) {
       toast("Enter a valid PremiumModule address", "error"); return;
@@ -518,6 +679,7 @@ export function AdminWizard() {
         logo_url: meta.logoUrl,
         vault_address: vaultAddress,
         premium_module_address: premiumModuleAddress,
+        claims_manager_address: claimsManagerAddress,
         coverage_cap: String(BigInt(Math.floor(Number(meta.coverageCap) * 1e18))),
         premium_rate: Number(meta.premiumRate) * 100,
         chain: "starknet-sepolia",
@@ -745,7 +907,7 @@ export function AdminWizard() {
           <div className="border border-neutral-800 rounded-lg p-4 mb-4">
             <h3 className="text-sm font-medium mb-1">2. Create Vault</h3>
             <p className="text-xs text-neutral-500 mb-3">
-              Calls <code className="text-neutral-400">factory.create_vault()</code> — deploys Vault + PremiumModule
+              Calls <code className="text-neutral-400">factory.create_vault()</code> — deploys Vault + PremiumModule + ClaimsManager
             </p>
             <TxButton
               label="Create Vault"
@@ -761,6 +923,9 @@ export function AdminWizard() {
                 <p className="text-emerald-400">
                   PremiumModule: <span className="font-mono">{premiumModuleAddress}</span>
                 </p>
+                <p className="text-emerald-400">
+                  ClaimsManager: <span className="font-mono">{claimsManagerAddress || "loading…"}</span>
+                </p>
               </div>
             )}
           </div>
@@ -773,6 +938,7 @@ export function AdminWizard() {
               <Field label="Protocol ID" value={protocolId} onChange={setProtocolId} placeholder="e.g. 1" />
               <Field label="Vault Address" value={vaultAddress} onChange={setVaultAddress} placeholder="0x..." />
               <Field label="PremiumModule Address" value={premiumModuleAddress} onChange={setPremiumModuleAddress} placeholder="0x..." />
+              <Field label="ClaimsManager Address" value={claimsManagerAddress} onChange={setClaimsManagerAddress} placeholder="0x..." />
             </div>
           </details>
 
@@ -784,7 +950,7 @@ export function AdminWizard() {
               Back
             </button>
             <button
-              disabled={!protocolId || !vaultAddress || !premiumModuleAddress}
+              disabled={!protocolId || !vaultAddress || !premiumModuleAddress || !claimsManagerAddress}
               onClick={() => setStep(3)}
               className="px-5 py-2 text-sm bg-white text-black rounded font-medium hover:bg-neutral-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -838,6 +1004,52 @@ export function AdminWizard() {
             />
           </div>
 
+          <div className="border border-neutral-800 rounded-lg p-4 mb-4">
+            <h3 className="text-sm font-medium mb-1">4. Set Claims Manager</h3>
+            <p className="text-xs text-neutral-500 mb-3">
+              Calls <code className="text-neutral-400">vault.set_claims_manager(claimsManager)</code> — grants CLAIMS_MANAGER_ROLE so ClaimsManager can trigger payouts
+            </p>
+            <TxButton
+              label="Set Claims Manager"
+              onClick={handleSetClaimsManager}
+              disabled={!claimsManagerAddress}
+              status={claimsManagerDone ? "done" : setClaimsManagerTx.status}
+            />
+          </div>
+
+          <div className="border border-neutral-800 rounded-lg p-4 mb-4">
+            <h3 className="text-sm font-medium mb-1">5. Set Burner</h3>
+            <p className="text-xs text-neutral-500 mb-3">
+              Calls <code className="text-neutral-400">coverageToken.set_burner(claimsManager)</code> — grants BURNER_ROLE so ClaimsManager can burn NFTs on approval
+            </p>
+            <TxButton
+              label="Set Burner"
+              onClick={handleSetBurner}
+              disabled={!claimsManagerAddress}
+              status={burnerDone ? "done" : setBurnerTx.status}
+            />
+          </div>
+
+          <div className="border border-neutral-800 rounded-lg p-4 mb-4">
+            <h3 className="text-sm font-medium mb-1">6. Add Governor</h3>
+            <p className="text-xs text-neutral-500 mb-3">
+              Calls <code className="text-neutral-400">claimsManager.add_governor(address)</code> — grants GOVERNOR_ROLE to the wallet that can approve/reject claims
+            </p>
+            <Field
+              label="Governor Address"
+              value={governorAddress}
+              onChange={setGovernorAddress}
+              placeholder="0x..."
+              hint="Defaults to your connected wallet"
+            />
+            <TxButton
+              label="Add Governor"
+              onClick={handleAddGovernor}
+              disabled={!claimsManagerAddress || !isValidAddress(governorAddress)}
+              status={governorDone ? "done" : addGovernorTx.status}
+            />
+          </div>
+
           <div className="flex gap-3 mt-2">
             <button
               onClick={() => setStep(2)}
@@ -846,7 +1058,7 @@ export function AdminWizard() {
               Back
             </button>
             <button
-              disabled={!minterDone || !depositLimitDone || !coverageManagerDone}
+              disabled={!minterDone || !depositLimitDone || !coverageManagerDone || !claimsManagerDone || !burnerDone || !governorDone}
               onClick={() => setStep(4)}
               className="px-5 py-2 text-sm bg-white text-black rounded font-medium hover:bg-neutral-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -897,6 +1109,84 @@ export function AdminWizard() {
             </p>
           )}
         </div>
+
+        {/* Claims Review */}
+        <div className="border border-neutral-800 rounded-lg p-4 mt-4">
+          <h3 className="text-sm font-medium mb-1">Claims Review</h3>
+          <p className="text-xs text-neutral-500 mb-3">
+            Load pending claims from a protocol&apos;s ClaimsManager and approve or reject them.
+            Requires GOVERNOR_ROLE on the ClaimsManager.
+          </p>
+          {reviewProtocols.length > 0 ? (
+            <div className="mb-3">
+              <label className="text-xs text-neutral-400 mb-1 block">Protocol</label>
+              <select
+                value={reviewProtocolIdx}
+                onChange={(e) => { setReviewProtocolIdx(Number(e.target.value)); setReviewClaims([]); }}
+                className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded text-sm text-white focus:outline-none focus:border-neutral-500"
+              >
+                {reviewProtocols.map((p, i) => (
+                  <option key={i} value={i}>{p.name} — {p.cm.slice(0, 10)}…</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <p className="text-xs text-neutral-600 mb-3">No protocols with ClaimsManager found in database.</p>
+          )}
+          <TxButton
+            label={reviewLoading ? "Loading…" : "Load Claims"}
+            onClick={handleLoadClaims}
+            disabled={reviewProtocols.length === 0 || reviewLoading}
+            status="idle"
+          />
+          {reviewClaims.length === 0 && !reviewLoading && (
+            <p className="text-xs text-neutral-600 mt-1">No claims found.</p>
+          )}
+          {reviewClaims.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {reviewClaims.map((c) => {
+                const statusLabel = c.status === 0 ? "Pending" : c.status === 1 ? "Approved" : "Rejected";
+                const isPending = c.status === 0;
+                const isActioning = actioningClaimId === c.claim_id;
+                const selected = reviewProtocols[reviewProtocolIdx];
+                return (
+                  <div key={c.claim_id} className="border border-neutral-800 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium">Claim #{c.claim_id} · Token #{c.token_id}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        c.status === 0 ? "bg-amber-500/10 text-amber-400"
+                        : c.status === 1 ? "bg-emerald-500/10 text-emerald-400"
+                        : "bg-red-500/10 text-red-400"
+                      }`}>{statusLabel}</span>
+                    </div>
+                    <p className="text-xs text-neutral-500 mb-2 font-mono">{c.claimant.slice(0, 12)}…</p>
+                    {isPending && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleApproveClaim(c.claim_id, selected.cm)}
+                          disabled={isActioning && (claimActionTx.status === "pending" || claimActionTx.status === "confirming")}
+                          className="text-xs px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors disabled:opacity-40"
+                        >
+                          {isActioning && claimActionTx.status === "pending" ? "Signing…"
+                            : isActioning && claimActionTx.status === "confirming" ? "Confirming…"
+                            : isActioning && claimActionTx.status === "done" ? "Done"
+                            : "Approve"}
+                        </button>
+                        <button
+                          onClick={() => handleRejectClaim(c.claim_id, selected.cm)}
+                          disabled={isActioning && (claimActionTx.status === "pending" || claimActionTx.status === "confirming")}
+                          className="text-xs px-3 py-1.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded hover:bg-red-500/20 transition-colors disabled:opacity-40"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Step 4: Save to Database */}
@@ -912,6 +1202,7 @@ export function AdminWizard() {
             <Row label="Premium Rate" value={`${meta.premiumRate}%`} />
             <Row label="Vault Address" value={vaultAddress} mono />
             <Row label="PremiumModule" value={premiumModuleAddress} mono />
+            <Row label="ClaimsManager" value={claimsManagerAddress} mono />
             <Row label="Deposit Limit" value={`${meta.depositLimit} tokens`} />
           </div>
 

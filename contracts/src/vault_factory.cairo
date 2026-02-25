@@ -2,18 +2,20 @@
 //
 // INSURANCE VAULT FACTORY
 //
-// Deploys protocol-specific BTC-LST underwriting vaults and their paired
-// premium modules, then links them to the Protocol Registry. Each protocol
-// gets exactly one vault + one premium module. The factory uses deploy_syscall
-// to instantiate both from stored class hashes and automatically calls
-// registry.set_vault() to wire everything together.
+// Deploys protocol-specific BTC-LST underwriting vaults, their paired
+// premium modules, and a ClaimsManager — then links them to the Protocol
+// Registry. Each protocol gets exactly one vault + premium module + claims
+// manager. The factory uses deploy_syscall to instantiate all three from
+// stored class hashes and automatically calls registry.set_vault() to wire
+// the vault into the registry.
 //
 // Deployment flow:
 //   1. Governance registers protocol in registry
 //   2. Deployer calls factory.create_vault(protocol_id, ...)
-//   3. Factory deploys vault + premium module, calls registry.set_vault()
-//   4. Governance grants MINTER_ROLE on CoverageToken to premium module
-//   5. System is live for LP deposits and coverage purchases
+//   3. Factory deploys vault + premium module + claims manager
+//   4. Factory calls registry.set_vault() to register the vault
+//   5. Admin panel grants MINTER/BURNER roles and wires permissions
+//   6. System is live for LP deposits and coverage purchases
 //
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -29,12 +31,14 @@ pub trait IInsuranceVaultFactory<TContractState> {
 
     fn set_vault_class_hash(ref self: TContractState, new_hash: starknet::ClassHash);
     fn set_premium_class_hash(ref self: TContractState, new_hash: starknet::ClassHash);
+    fn set_claims_class_hash(ref self: TContractState, new_hash: starknet::ClassHash);
     fn set_registry(ref self: TContractState, new_registry: starknet::ContractAddress);
     fn set_coverage_token(ref self: TContractState, token: starknet::ContractAddress);
     fn set_premium_asset(ref self: TContractState, asset: starknet::ContractAddress);
 
     fn get_vault(self: @TContractState, protocol_id: u256) -> starknet::ContractAddress;
     fn get_premium_module(self: @TContractState, protocol_id: u256) -> starknet::ContractAddress;
+    fn get_claims_manager(self: @TContractState, protocol_id: u256) -> starknet::ContractAddress;
     fn get_protocol(self: @TContractState, vault: starknet::ContractAddress) -> u256;
     fn get_premium_asset(self: @TContractState) -> starknet::ContractAddress;
     fn all_vaults(self: @TContractState) -> Array<starknet::ContractAddress>;
@@ -84,12 +88,14 @@ pub mod InsuranceVaultFactory {
         registry: ContractAddress,
         vault_class_hash: ClassHash,
         premium_class_hash: ClassHash,
+        claims_class_hash: ClassHash,
         coverage_token: ContractAddress,
         // Token users pay premiums in (e.g. USDC). Separate from the vault's
         // underlying_asset (BTC-LST) which backs the coverage pool.
         premium_asset: ContractAddress,
         vault_by_protocol: Map<u256, ContractAddress>,
         premium_by_protocol: Map<u256, ContractAddress>,
+        claims_by_protocol: Map<u256, ContractAddress>,
         protocol_by_vault: Map<ContractAddress, u256>,
         vault_count: u32,
         vault_list: Map<u32, ContractAddress>,
@@ -107,6 +113,7 @@ pub mod InsuranceVaultFactory {
         VaultCreated: VaultCreated,
         VaultClassUpdated: VaultClassUpdated,
         PremiumClassUpdated: PremiumClassUpdated,
+        ClaimsClassUpdated: ClaimsClassUpdated,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -115,6 +122,7 @@ pub mod InsuranceVaultFactory {
         pub protocol_id: u256,
         pub vault: ContractAddress,
         pub premium_module: ContractAddress,
+        pub claims_manager: ContractAddress,
         pub asset: ContractAddress,
     }
 
@@ -128,12 +136,18 @@ pub mod InsuranceVaultFactory {
         pub new_class_hash: ClassHash,
     }
 
+    #[derive(Drop, starknet::Event)]
+    pub struct ClaimsClassUpdated {
+        pub new_class_hash: ClassHash,
+    }
+
     #[constructor]
     fn constructor(
         ref self: ContractState,
         registry: ContractAddress,
         vault_class_hash: ClassHash,
         premium_class_hash: ClassHash,
+        claims_class_hash: ClassHash,
         coverage_token: ContractAddress,
         premium_asset: ContractAddress,
         owner: ContractAddress,
@@ -153,6 +167,7 @@ pub mod InsuranceVaultFactory {
         self.registry.write(registry);
         self.vault_class_hash.write(vault_class_hash);
         self.premium_class_hash.write(premium_class_hash);
+        self.claims_class_hash.write(claims_class_hash);
         self.coverage_token.write(coverage_token);
         self.premium_asset.write(premium_asset);
     }
@@ -220,9 +235,23 @@ pub mod InsuranceVaultFactory {
             )
                 .unwrap_syscall();
 
+            // --- Deploy claims manager ---
+            let mut cm_calldata: Array<felt252> = array![];
+            vault_address.serialize(ref cm_calldata);
+            coverage_token.serialize(ref cm_calldata);
+            pm_address.serialize(ref cm_calldata);
+            owner.serialize(ref cm_calldata);
+
+            let cm_salt: felt252 = (protocol_id.low + 0x434D).into();
+            let (cm_address, _) = deploy_syscall(
+                self.claims_class_hash.read(), cm_salt, cm_calldata.span(), false,
+            )
+                .unwrap_syscall();
+
             // --- Store mappings ---
             self.vault_by_protocol.entry(protocol_id).write(vault_address);
             self.premium_by_protocol.entry(protocol_id).write(pm_address);
+            self.claims_by_protocol.entry(protocol_id).write(cm_address);
             self.protocol_by_vault.entry(vault_address).write(protocol_id);
 
             let idx = self.vault_count.read();
@@ -238,6 +267,7 @@ pub mod InsuranceVaultFactory {
                         protocol_id,
                         vault: vault_address,
                         premium_module: pm_address,
+                        claims_manager: cm_address,
                         asset: underlying_asset,
                     },
                 );
@@ -255,6 +285,12 @@ pub mod InsuranceVaultFactory {
             self.access_control.assert_only_role(OWNER_ROLE);
             self.premium_class_hash.write(new_hash);
             self.emit(PremiumClassUpdated { new_class_hash: new_hash });
+        }
+
+        fn set_claims_class_hash(ref self: ContractState, new_hash: ClassHash) {
+            self.access_control.assert_only_role(OWNER_ROLE);
+            self.claims_class_hash.write(new_hash);
+            self.emit(ClaimsClassUpdated { new_class_hash: new_hash });
         }
 
         fn set_registry(ref self: ContractState, new_registry: ContractAddress) {
@@ -281,6 +317,10 @@ pub mod InsuranceVaultFactory {
 
         fn get_premium_module(self: @ContractState, protocol_id: u256) -> ContractAddress {
             self.premium_by_protocol.entry(protocol_id).read()
+        }
+
+        fn get_claims_manager(self: @ContractState, protocol_id: u256) -> ContractAddress {
+            self.claims_by_protocol.entry(protocol_id).read()
         }
 
         fn get_protocol(self: @ContractState, vault: ContractAddress) -> u256 {

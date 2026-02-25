@@ -50,6 +50,7 @@ export async function POST(request: Request) {
       logo_url: body.logo_url || "",
       vault_address: body.vault_address,
       premium_module_address: body.premium_module_address,
+      claims_manager_address: body.claims_manager_address || "0x0",
       coverage_cap: body.coverage_cap,
       premium_rate: body.premium_rate,
       chain: body.chain || "starknet-sepolia",
