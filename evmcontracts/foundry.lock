@@ -1,0 +1,20 @@
+{
+  "lib/LayerZero-v2": {
+    "rev": "401e23dd928d3d27e80fda65e053ee311ed6a08e"
+  },
+  "lib/devtools": {
+    "rev": "57ec2321a60619e44dac00942fbf8077ea2084d9"
+  },
+  "lib/forge-std": {
+    "tag": {
+      "name": "v1.15.0",
+      "rev": "0844d7e1fc5e60d77b68e469bff60265f236c398"
+    }
+  },
+  "lib/openzeppelin-contracts": {
+    "tag": {
+      "name": "v5.5.0",
+      "rev": "fcbae5394ae8ad52d8e580a3477db99814b9d565"
+    }
+  }
+}

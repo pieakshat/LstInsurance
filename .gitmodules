@@ -1,0 +1,12 @@
+[submodule "evmcontracts/lib/devtools"]
+	path = evmcontracts/lib/devtools
+	url = https://github.com/layerzero-labs/devtools
+[submodule "evmcontracts/lib/LayerZero-v2"]
+	path = evmcontracts/lib/LayerZero-v2
+	url = https://github.com/layerzero-labs/LayerZero-v2
+[submodule "evmcontracts/lib/openzeppelin-contracts"]
+	path = evmcontracts/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "evmcontracts/lib/solidity-bytes-utils"]
+	path = evmcontracts/lib/solidity-bytes-utils
+	url = https://github.com/GNSPS/solidity-bytes-utils.git

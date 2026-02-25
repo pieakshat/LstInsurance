@@ -38,7 +38,6 @@ pub trait IPremiumModule<TContractState> {
     fn notify_claim_payout(ref self: TContractState, token_id: u256);
 
     fn set_claims_manager(ref self: TContractState, cm: starknet::ContractAddress);
-    fn set_coverage_token(ref self: TContractState, token: starknet::ContractAddress);
 
     fn current_epoch(self: @TContractState) -> u32;
     fn epoch_premiums(self: @TContractState, epoch: u32) -> u256;
@@ -446,12 +445,6 @@ pub mod PremiumModule {
         fn set_claims_manager(ref self: ContractState, cm: ContractAddress) {
             self.access_control.assert_only_role(OWNER_ROLE);
             self.claims_manager.write(cm);
-        }
-
-        fn set_coverage_token(ref self: ContractState, token: ContractAddress) {
-            self.access_control.assert_only_role(OWNER_ROLE);
-            assert(token.is_non_zero(), 'Invalid coverage token');
-            self.coverage_token.write(token);
         }
 
         fn current_epoch(self: @ContractState) -> u32 {
