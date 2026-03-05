@@ -3,8 +3,8 @@ import { StarknetProvider } from "./starknet-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "STRK Insurance",
-  description: "BTC-LST insurance infrastructure on Starknet",
+  title: "BitCover — BTC Insurance for DeFi",
+  description: "On-chain coverage for your BTC positions across DeFi protocols. No custodians, no paperwork, instant settlement on Starknet.",
 };
 
 export default function RootLayout({
@@ -14,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-black text-white min-h-screen antialiased">
+      <body className="text-white min-h-screen antialiased">
         <StarknetProvider>{children}</StarknetProvider>
       </body>
     </html>

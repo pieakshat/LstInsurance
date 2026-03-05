@@ -41,12 +41,12 @@ export default function AppPage() {
       <GlobalStats />
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-neutral-800 mb-8">
+      <div className="flex gap-1 border-b border-white/6 mb-8">
         {TABS.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors relative ${
+            className={`px-4 py-2.5 text-sm font-medium transition-all duration-150 relative ${
               activeTab === tab
                 ? "text-white"
                 : "text-neutral-500 hover:text-neutral-300"
@@ -54,7 +54,7 @@ export default function AppPage() {
           >
             {tab}
             {activeTab === tab && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-white" />
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full bg-[#E8704A]" />
             )}
           </button>
         ))}
@@ -71,21 +71,18 @@ export default function AppPage() {
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="border border-neutral-800 rounded-xl p-5 animate-pulse"
-                >
+                <div key={i} className="gradient-border rounded-xl p-5">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-full bg-neutral-800" />
+                    <div className="w-10 h-10 rounded-full skeleton" />
                     <div className="space-y-2">
-                      <div className="h-4 w-24 bg-neutral-800 rounded" />
-                      <div className="h-3 w-32 bg-neutral-800 rounded" />
+                      <div className="h-4 w-24 skeleton rounded" />
+                      <div className="h-3 w-32 skeleton rounded" />
                     </div>
                   </div>
-                  <div className="h-3 w-full bg-neutral-800 rounded mb-4" />
+                  <div className="h-3 w-full skeleton rounded mb-4" />
                   <div className="flex justify-between">
-                    <div className="h-4 w-16 bg-neutral-800 rounded" />
-                    <div className="h-4 w-16 bg-neutral-800 rounded" />
+                    <div className="h-4 w-16 skeleton rounded" />
+                    <div className="h-4 w-16 skeleton rounded" />
                   </div>
                 </div>
               ))}

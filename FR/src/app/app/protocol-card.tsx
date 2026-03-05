@@ -10,13 +10,13 @@ export function ProtocolCard({ protocol }: { protocol: Protocol }) {
   return (
     <Link
       href={`/app/protocol/${protocol._id}`}
-      className="block border border-neutral-800 rounded-xl p-5 hover:border-neutral-600 transition-colors cursor-pointer"
+      className="block gradient-border rounded-xl p-5 transition-all duration-200 cursor-pointer group"
     >
       <div className="flex items-center gap-3 mb-4">
         <img
           src={protocol.logo_url}
           alt={protocol.protocol_name}
-          className="w-10 h-10 rounded-full bg-neutral-800"
+          className="w-10 h-10 rounded-full bg-white/5"
         />
         <div>
           <h3 className="font-semibold leading-tight">
@@ -26,18 +26,18 @@ export function ProtocolCard({ protocol }: { protocol: Protocol }) {
         </div>
       </div>
 
-      <p className="text-sm text-neutral-500 mb-4 line-clamp-2">
+      <p className="text-sm text-neutral-500 mb-5 line-clamp-2">
         {protocol.description}
       </p>
 
       <div className="flex items-center justify-between text-sm">
         <div>
-          <span className="text-neutral-500">Premium</span>
-          <p className="font-medium">{ratePercent}%</p>
+          <span className="text-xs text-neutral-500 block mb-0.5">Premium</span>
+          <p className="font-semibold text-white">{ratePercent}% / yr</p>
         </div>
         <div className="text-right">
-          <span className="text-neutral-500">Coverage Cap</span>
-          <p className="font-medium">{capDisplay}</p>
+          <span className="text-xs text-neutral-500 block mb-0.5">Coverage Cap</span>
+          <p className="font-semibold text-white">{capDisplay} BTC-LST</p>
         </div>
       </div>
     </Link>

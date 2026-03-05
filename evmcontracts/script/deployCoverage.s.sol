@@ -7,14 +7,14 @@ import {BaseInsuranceHub} from "../src/BaseInsuranceHub.sol";
 
 contract DeployCoverage is Script {
     // ── Base Sepolia constants ────────────────────────────────────────────────
-    address constant LZ_ENDPOINT = 0x6EDCE65403992e310A62460808c4b910D972f10f;
+    address constant LZ_ENDPOINT  = 0x6EDCE65403992e310A62460808c4b910D972f10f;
     address constant USDC_BASE_SEP = 0x036CbD53842c5426634e7929541eC2318f3dCF7e;
-    uint32 constant STARKNET_EID = 40500;
 
     function run() external {
-        address owner = vm.envAddress("OWNER");
-        address governor = vm.envOr("GOVERNOR", owner); // defaults to owner if not set
-        uint256 privKey = vm.envUint("PRIVATE_KEY");
+        address owner    = vm.envAddress("OWNER");
+        address governor = vm.envOr("GOVERNOR", owner);
+        uint256 privKey  = vm.envUint("PRIVATE_KEY");
+        uint32  eid      = uint32(vm.envUint("STARKNET_EID")); // set via env, no recompile needed
 
         vm.startBroadcast(privKey);
 
@@ -29,7 +29,7 @@ contract DeployCoverage is Script {
             address(token),
             USDC_BASE_SEP,
             governor,
-            STARKNET_EID
+            eid
         );
         console.log("BaseInsuranceHub: ", address(hub));
 

@@ -83,54 +83,54 @@ function VaultCard({ p }: { p: Protocol }) {
   const dash = enabled ? "—" : "N/A";
 
   return (
-    <div className="border border-neutral-800 rounded-xl p-6">
+    <div className="gradient-border rounded-xl p-6 transition-all duration-200">
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
           <img
             src={p.logo_url}
             alt={p.protocol_name}
-            className="w-11 h-11 rounded-full bg-neutral-800"
+            className="w-11 h-11 rounded-full bg-white/5"
           />
           <div>
             <h3 className="font-semibold">{p.protocol_name}</h3>
             <p className="text-xs text-neutral-500">{p.insurance_name}</p>
           </div>
         </div>
-        <span className="text-xs px-2.5 py-1 bg-neutral-800 rounded-full text-neutral-300">
+        <span className="text-xs text-neutral-500">
           {p.chain}
         </span>
       </div>
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-        <div className="bg-neutral-900 rounded-lg p-3">
+        <div className="bg-[#0f1117] rounded-lg p-3">
           <p className="text-xs text-neutral-500 mb-1">Total Assets</p>
           <p className="text-sm font-semibold">
             {totalAssetsRaw !== undefined ? `${fmtBtc(totalAssets)} BTC-LST` : dash}
           </p>
         </div>
-        <div className="bg-neutral-900 rounded-lg p-3">
+        <div className="bg-[#0f1117] rounded-lg p-3">
           <p className="text-xs text-neutral-500 mb-1">Locked</p>
-          <p className="text-sm font-semibold">
+          <p className="text-sm font-semibold text-white">
             {lockedRaw !== undefined ? `${fmtBtc(locked)} BTC-LST` : dash}
           </p>
         </div>
-        <div className="bg-neutral-900 rounded-lg p-3">
+        <div className="bg-[#0f1117] rounded-lg p-3">
           <p className="text-xs text-neutral-500 mb-1">Available</p>
-          <p className="text-sm font-semibold">
+          <p className="text-sm font-semibold text-white">
             {availableRaw !== undefined ? `${fmtBtc(available)} BTC-LST` : dash}
           </p>
         </div>
-        <div className="bg-neutral-900 rounded-lg p-3">
+        <div className="bg-[#0f1117] rounded-lg p-3">
           <p className="text-xs text-neutral-500 mb-1">LP Shares</p>
-          <p className="text-sm font-semibold">
+          <p className="text-sm font-semibold text-white">
             {totalSupplyRaw !== undefined ? fmtBtc(totalSupply) : dash}
           </p>
         </div>
-        <div className="bg-neutral-900 rounded-lg p-3">
+        <div className="bg-[#0f1117] rounded-lg p-3">
           <p className="text-xs text-neutral-500 mb-1">Premium Rate</p>
-          <p className="text-sm font-semibold">{ratePercent}%</p>
+          <p className="text-sm font-semibold text-white">{ratePercent}% / yr</p>
         </div>
       </div>
 
@@ -142,16 +142,19 @@ function VaultCard({ p }: { p: Protocol }) {
             {enabled ? `${(utilization * 100).toFixed(1)}%` : "—"}
           </span>
         </div>
-        <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
           <div
-            className="h-full bg-white rounded-full transition-all"
-            style={{ width: `${Math.min(utilization * 100, 100)}%` }}
+            className="h-full rounded-full transition-all"
+            style={{
+              width: `${Math.min(utilization * 100, 100)}%`,
+              background: "#E8704A",
+            }}
           />
         </div>
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between mt-4 pt-4 border-t border-neutral-800">
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/5">
         <div className="flex items-center gap-4 text-xs text-neutral-500">
           <span>
             Vault:{" "}
@@ -163,7 +166,7 @@ function VaultCard({ p }: { p: Protocol }) {
         </div>
         <Link
           href={`/app/lp/${p._id}`}
-          className="text-xs px-4 py-2 bg-white text-black rounded-lg font-medium hover:bg-neutral-200 transition-colors"
+          className="btn-primary text-xs px-4 py-2 text-white rounded-lg font-medium"
         >
           Manage
         </Link>
@@ -209,17 +212,17 @@ export default function LPPage() {
       {loading ? (
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="border border-neutral-800 rounded-xl p-6 animate-pulse">
+            <div key={i} className="gradient-border rounded-xl p-6">
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-11 h-11 rounded-full bg-neutral-800" />
+                <div className="w-11 h-11 rounded-full skeleton" />
                 <div className="space-y-2">
-                  <div className="h-5 w-40 bg-neutral-800 rounded" />
-                  <div className="h-3 w-28 bg-neutral-800 rounded" />
+                  <div className="h-5 w-40 skeleton rounded" />
+                  <div className="h-3 w-28 skeleton rounded" />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 {[1, 2, 3].map((j) => (
-                  <div key={j} className="h-14 bg-neutral-800 rounded-lg" />
+                  <div key={j} className="h-14 skeleton rounded-lg" />
                 ))}
               </div>
             </div>

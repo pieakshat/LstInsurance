@@ -68,10 +68,10 @@ function statusDescription(status: ClaimStatus): string {
   }
 }
 
-const STATUS_STYLES: Record<ClaimStatus, { bg: string; text: string; label: string }> = {
-  pending:  { bg: "bg-amber-500/10",   text: "text-amber-400",   label: "Pending" },
-  approved: { bg: "bg-emerald-500/10", text: "text-emerald-400", label: "Approved" },
-  rejected: { bg: "bg-red-500/10",     text: "text-red-400",     label: "Rejected" },
+const STATUS_STYLES: Record<ClaimStatus, { bg: string; text: string; label: string; dot: string }> = {
+  pending:  { bg: "bg-[#60A5FA]/10", text: "text-[#60A5FA]", label: "Pending",  dot: "#60A5FA" },
+  approved: { bg: "bg-[#34D399]/10", text: "text-[#34D399]", label: "Approved", dot: "#34D399" },
+  rejected: { bg: "bg-red-500/10",   text: "text-red-400",   label: "Rejected", dot: "#f87171" },
 };
 
 // ---------------------------------------------------------------------------
@@ -173,16 +173,16 @@ export function YourClaims() {
     return (
       <div className="space-y-3">
         {[1, 2].map((i) => (
-          <div key={i} className="border border-neutral-800 rounded-xl p-5 animate-pulse">
+          <div key={i} className="gradient-border rounded-xl p-5">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-full bg-neutral-800" />
+              <div className="w-9 h-9 rounded-full skeleton" />
               <div className="space-y-1.5">
-                <div className="h-4 w-32 bg-neutral-800 rounded" />
-                <div className="h-3 w-20 bg-neutral-800 rounded" />
+                <div className="h-4 w-32 skeleton rounded" />
+                <div className="h-3 w-20 skeleton rounded" />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-4">
-              {[1, 2, 3].map((j) => <div key={j} className="h-10 bg-neutral-800 rounded" />)}
+              {[1, 2, 3].map((j) => <div key={j} className="h-10 skeleton rounded" />)}
             </div>
           </div>
         ))}
@@ -208,7 +208,7 @@ export function YourClaims() {
         const isExpanded = expandedId === claim.claim_id;
 
         return (
-          <div key={`${claim.claims_manager}-${claim.claim_id}`} className="border border-neutral-800 rounded-xl">
+          <div key={`${claim.claims_manager}-${claim.claim_id}`} className="gradient-border rounded-xl transition-all duration-200">
             <button
               onClick={() => setExpandedId(isExpanded ? null : claim.claim_id)}
               className="w-full text-left p-5"
@@ -216,8 +216,8 @@ export function YourClaims() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   {claim.logo_url
-                    ? <img src={claim.logo_url} alt={claim.protocol_name} className="w-9 h-9 rounded-full bg-neutral-800" />
-                    : <div className="w-9 h-9 rounded-full bg-neutral-800" />}
+                    ? <img src={claim.logo_url} alt={claim.protocol_name} className="w-9 h-9 rounded-full bg-white/5" />
+                    : <div className="w-9 h-9 rounded-full bg-white/5" />}
                   <div>
                     <p className="font-medium text-sm">{claim.protocol_name}</p>
                     <p className="text-xs text-neutral-500">
@@ -226,7 +226,7 @@ export function YourClaims() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2.5 py-1 rounded-full ${style.bg} ${style.text}`}>
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${style.bg} ${style.text}`}>
                     {style.label}
                   </span>
                   <svg
@@ -256,7 +256,7 @@ export function YourClaims() {
 
             {isExpanded && (
               <div className="px-5 pb-5 pt-0">
-                <div className="border-t border-neutral-800 pt-4">
+                <div className="border-t border-white/5 pt-4">
                   <div className="mb-4">
                     <p className="text-xs text-neutral-500 mb-2">Status Timeline</p>
                     <div className="space-y-2">
@@ -269,18 +269,23 @@ export function YourClaims() {
                       </div>
                       {claim.resolved_at && (
                         <div className="flex items-start gap-3">
-                          <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${claim.status === "approved" ? "bg-emerald-400" : "bg-red-400"}`} />
+                          <div
+                            className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
+                            style={{ background: style.dot }}
+                          />
                           <div>
-                            <p className="text-xs font-medium">{claim.status === "approved" ? "Approved" : "Rejected"}</p>
+                            <p className="text-xs font-medium" style={{ color: style.dot }}>
+                              {claim.status === "approved" ? "Approved" : "Rejected"}
+                            </p>
                             <p className="text-xs text-neutral-500">{formatDateTime(claim.resolved_at)}</p>
                           </div>
                         </div>
                       )}
                       {claim.status === "pending" && (
                         <div className="flex items-start gap-3">
-                          <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0 animate-pulse" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#60A5FA] mt-1.5 shrink-0 animate-pulse" />
                           <div>
-                            <p className="text-xs font-medium text-amber-400">Under Review</p>
+                            <p className="text-xs font-medium text-[#60A5FA]">Under Review</p>
                           </div>
                         </div>
                       )}
@@ -291,7 +296,7 @@ export function YourClaims() {
                     href={`https://sepolia.voyager.online/contract/${claim.claims_manager}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-block text-xs px-4 py-2 border border-neutral-700 rounded-lg hover:border-neutral-500 transition-colors"
+                    className="inline-block text-xs px-4 py-2 border border-white/10 rounded-lg text-neutral-400 hover:text-white hover:border-white/20 transition-all"
                   >
                     View ClaimsManager &nearr;
                   </a>

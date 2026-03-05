@@ -133,16 +133,16 @@ export function YourCovers() {
     return (
       <div className="space-y-3">
         {[1, 2].map((i) => (
-          <div key={i} className="border border-neutral-800 rounded-xl p-5 animate-pulse">
+          <div key={i} className="gradient-border rounded-xl p-5">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-full bg-neutral-800" />
+              <div className="w-9 h-9 rounded-full skeleton" />
               <div className="space-y-1.5">
-                <div className="h-4 w-32 bg-neutral-800 rounded" />
-                <div className="h-3 w-20 bg-neutral-800 rounded" />
+                <div className="h-4 w-32 skeleton rounded" />
+                <div className="h-3 w-20 skeleton rounded" />
               </div>
             </div>
             <div className="grid grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map((j) => <div key={j} className="h-10 bg-neutral-800 rounded" />)}
+              {[1, 2, 3, 4].map((j) => <div key={j} className="h-10 skeleton rounded" />)}
             </div>
           </div>
         ))}
@@ -169,21 +169,21 @@ export function YourCovers() {
         return (
           <div
             key={cover.token_id}
-            className={`border rounded-xl transition-colors ${isActive ? "border-neutral-800" : "border-neutral-800/50 opacity-60"}`}
+            className={`gradient-border rounded-xl transition-all duration-200 ${!isActive ? "opacity-50" : ""}`}
           >
             <button onClick={() => setExpandedId(isExpanded ? null : cover.token_id)} className="w-full text-left p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   {cover.logo_url
-                    ? <img src={cover.logo_url} alt={cover.protocol_name} className="w-9 h-9 rounded-full bg-neutral-800" />
-                    : <div className="w-9 h-9 rounded-full bg-neutral-800" />}
+                    ? <img src={cover.logo_url} alt={cover.protocol_name} className="w-9 h-9 rounded-full bg-white/5" />
+                    : <div className="w-9 h-9 rounded-full bg-white/5" />}
                   <div>
                     <p className="font-medium text-sm">{cover.protocol_name}</p>
                     <p className="text-xs text-neutral-500">Token #{cover.token_id}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2.5 py-1 rounded-full ${isActive ? "bg-emerald-500/10 text-emerald-400" : "bg-neutral-800 text-neutral-500"}`}>
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${isActive ? "bg-[#E8704A]/12 text-[#E8704A]" : "bg-white/5 text-neutral-500"}`}>
                     {isActive ? "Active" : "Expired"}
                   </span>
                   <svg className={`w-4 h-4 text-neutral-500 transition-transform ${isExpanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -214,7 +214,7 @@ export function YourCovers() {
 
             {isExpanded && (
               <div className="px-5 pb-5 pt-0">
-                <div className="border-t border-neutral-800 pt-4">
+                <div className="border-t border-white/5 pt-4">
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm mb-4">
                     <div>
                       <p className="text-xs text-neutral-500 mb-0.5">Start Date</p>
@@ -231,11 +231,11 @@ export function YourCovers() {
                   </div>
                   <div className="flex gap-2">
                     {isActive && (
-                      <Link href={`/app/submit-claim?tokenId=${cover.token_id}`} className="text-xs px-4 py-2 bg-white text-black rounded-lg font-medium hover:bg-neutral-200 transition-colors">
+                      <Link href={`/app/submit-claim?tokenId=${cover.token_id}`} className="btn-primary text-xs px-4 py-2 text-white rounded-lg font-medium">
                         File a Claim
                       </Link>
                     )}
-                    <a href={`https://sepolia.voyager.online/contract/${CONTRACTS.coverageToken}`} target="_blank" rel="noopener noreferrer" className="text-xs px-4 py-2 border border-neutral-700 rounded-lg hover:border-neutral-500 transition-colors">
+                    <a href={`https://sepolia.voyager.online/contract/${CONTRACTS.coverageToken}`} target="_blank" rel="noopener noreferrer" className="text-xs px-4 py-2 border border-white/10 rounded-lg text-neutral-400 hover:text-white hover:border-white/20 transition-all">
                       View on Explorer &nearr;
                     </a>
                   </div>

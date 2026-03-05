@@ -8,6 +8,7 @@ import type { Protocol } from "@/lib/types";
 import { shortenAddress } from "@/lib/utils";
 import { VAULT_ABI } from "@/lib/abis/vault";
 import { DepositWithdrawForm } from "./deposit-withdraw-form";
+import { PremiumClaimPanel } from "./premium-claim-panel";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -43,11 +44,11 @@ function asU256(v: bigint): { low: bigint; high: bigint } {
 // Sub-component
 // ---------------------------------------------------------------------------
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
   return (
-    <div className="bg-neutral-900 rounded-lg p-3">
+    <div className="bg-[#0f1117] rounded-lg p-3">
       <p className="text-xs text-neutral-500 mb-1">{label}</p>
-      <p className="text-sm font-semibold">{value}</p>
+      <p className="text-sm font-semibold" style={accent ? { color: accent } : undefined}>{value}</p>
     </div>
   );
 }
@@ -181,29 +182,29 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
   if (loading || (!protocol && !error)) {
     return (
       <div className="max-w-5xl mx-auto">
-        <div className="h-5 w-32 bg-neutral-800 rounded mb-8 animate-pulse" />
+        <div className="h-5 w-32 skeleton rounded mb-8" />
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3">
-            <div className="border border-neutral-800 rounded-xl p-6 animate-pulse space-y-4">
+            <div className="gradient-border rounded-xl p-6 space-y-4">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-neutral-800" />
+                <div className="w-12 h-12 rounded-full skeleton" />
                 <div className="space-y-2">
-                  <div className="h-5 w-40 bg-neutral-800 rounded" />
-                  <div className="h-3 w-24 bg-neutral-800 rounded" />
+                  <div className="h-5 w-40 skeleton rounded" />
+                  <div className="h-3 w-24 skeleton rounded" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <div key={i} className="h-14 bg-neutral-800 rounded-lg" />
+                  <div key={i} className="h-14 skeleton rounded-lg" />
                 ))}
               </div>
             </div>
           </div>
           <div className="lg:col-span-2">
-            <div className="border border-neutral-800 rounded-xl p-5 animate-pulse space-y-4">
-              <div className="h-5 w-24 bg-neutral-800 rounded" />
-              <div className="h-10 bg-neutral-800 rounded" />
-              <div className="h-32 bg-neutral-800 rounded" />
+            <div className="gradient-border rounded-xl p-5 space-y-4">
+              <div className="h-5 w-24 skeleton rounded" />
+              <div className="h-10 skeleton rounded" />
+              <div className="h-32 skeleton rounded" />
             </div>
           </div>
         </div>
@@ -236,21 +237,21 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Left — Vault info */}
         <div className="lg:col-span-3 space-y-6">
-          <div className="border border-neutral-800 rounded-xl p-5">
+          <div className="gradient-border rounded-xl p-5">
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <img
                   src={protocol.logo_url}
                   alt={protocol.protocol_name}
-                  className="w-12 h-12 rounded-full bg-neutral-800"
+                  className="w-12 h-12 rounded-full bg-white/5"
                 />
                 <div>
                   <h1 className="text-lg font-bold">{protocol.protocol_name} Vault</h1>
                   <p className="text-xs text-neutral-500">{protocol.insurance_name}</p>
                 </div>
               </div>
-              <span className="text-xs px-2.5 py-1 bg-neutral-800 rounded-full text-neutral-300">
+              <span className="text-xs text-neutral-500">
                 {protocol.chain}
               </span>
             </div>
@@ -268,6 +269,7 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
               <Stat
                 label="Available"
                 value={vaultEnabled ? `${fmtBtc(available)} BTC-LST` : "—"}
+                accent="#34D399"
               />
               <Stat
                 label="Total LP Shares"
@@ -289,19 +291,22 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
                 <span className="text-neutral-500">Utilization</span>
                 <span className="text-neutral-300">{(utilization * 100).toFixed(1)}%</span>
               </div>
-              <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-white rounded-full transition-all"
-                  style={{ width: `${Math.min(utilization * 100, 100)}%` }}
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(utilization * 100, 100)}%`,
+                    background: "#E8704A",
+                  }}
                 />
               </div>
             </div>
 
             {/* Extra info */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-4 border-t border-neutral-800">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-4 border-t border-white/5">
               <div>
                 <p className="text-xs text-neutral-500 mb-0.5">Premium Rate</p>
-                <p className="text-sm font-medium">{ratePercent}%</p>
+                <p className="text-sm font-medium text-white">{ratePercent}% / yr</p>
               </div>
               <div>
                 <p className="text-xs text-neutral-500 mb-0.5">Coverage Cap</p>
@@ -314,7 +319,7 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
             </div>
 
             {/* Addresses */}
-            <div className="flex items-center gap-6 pt-4 mt-4 border-t border-neutral-800 text-xs text-neutral-500">
+            <div className="flex items-center gap-6 pt-4 mt-4 border-t border-white/5 text-xs text-neutral-500">
               <span>
                 Vault:{" "}
                 <span className="font-mono text-neutral-400">
@@ -332,7 +337,7 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
 
           {/* Your Position */}
           {userAddress && userShares > 0n && (
-            <div className="border border-neutral-800 rounded-xl p-5">
+            <div className="gradient-border rounded-xl p-5">
               <h2 className="text-base font-semibold mb-4">Your Position</h2>
               <div className="grid grid-cols-3 gap-3">
                 <Stat label="Your Shares" value={fmtBtc(userShares)} />
@@ -347,6 +352,15 @@ export function VaultDetailClient({ protocolId }: { protocolId: string }) {
                 />
               </div>
             </div>
+          )}
+
+          {/* Premium Earnings */}
+          {userAddress && protocol.premium_module_address && (
+            <PremiumClaimPanel
+              premiumModuleAddr={protocol.premium_module_address}
+              userAddress={userAddress}
+              userShares={userShares}
+            />
           )}
         </div>
 

@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/app", label: "Dashboard" },
   { href: "/app/lp", label: "LP" },
   { href: "/app/submit-claim", label: "Submit a Claim" },
+  { href: "/app/governance", label: "Governance" },
   { href: "/app/admin", label: "Admin" },
 ] as const;
 
@@ -29,8 +30,8 @@ export function NavLinks() {
               href={href}
               className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                 isActive
-                  ? "text-white bg-neutral-800"
-                  : "text-neutral-400 hover:text-white hover:bg-neutral-800/50"
+                  ? "text-white bg-white/8"
+                  : "text-neutral-400 hover:text-white hover:bg-white/5"
               }`}
             >
               {label}
@@ -78,7 +79,7 @@ export function NavLinks() {
         </button>
 
         {open && (
-          <div className="absolute top-[57px] left-0 right-0 bg-black border-b border-neutral-800 z-40 px-6 py-3 flex flex-col gap-1">
+          <div className="absolute top-[57px] left-0 right-0 glass border-b border-white/5 z-40 px-6 py-3 flex flex-col gap-1">
             {LINKS.map(({ href, label }) => {
               const isActive =
                 href === "/app"
@@ -90,10 +91,10 @@ export function NavLinks() {
                   key={href}
                   href={href}
                   onClick={() => setOpen(false)}
-                  className={`px-3 py-2 text-sm rounded-md transition-colors ${
+                  className={`px-3 py-2 text-sm rounded-md transition-all ${
                     isActive
-                      ? "text-white bg-neutral-800"
-                      : "text-neutral-400 hover:text-white hover:bg-neutral-800/50"
+                      ? "text-white bg-white/8"
+                      : "text-neutral-400 hover:text-white hover:bg-white/5"
                   }`}
                 >
                   {label}

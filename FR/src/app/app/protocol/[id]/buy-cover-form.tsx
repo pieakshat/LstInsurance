@@ -80,7 +80,7 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
             : "Buy Cover";
 
   return (
-    <div className="border border-neutral-800 rounded-xl p-5">
+    <div className="gradient-border rounded-xl p-5">
       <h2 className="text-base font-semibold mb-4">Buy Cover</h2>
 
       {/* Coverage Amount Input */}
@@ -89,7 +89,7 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
           <label className="text-xs text-neutral-400">Coverage Amount</label>
           <span className="text-xs text-neutral-500">Bal: {balanceHuman} USDC</span>
         </div>
-        <div className="flex items-center border border-neutral-700 rounded-lg overflow-hidden focus-within:border-neutral-500 transition-colors">
+        <div className="flex items-center bg-[#0f1117] border border-white/8 rounded-lg overflow-hidden focus-within:border-[#E8704A]/50 transition-colors">
           <input
             type="number"
             min="0"
@@ -102,7 +102,7 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
             }}
             className="flex-1 bg-transparent px-3 py-2.5 text-sm text-white placeholder-neutral-600 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
-          <span className="px-3 text-xs text-neutral-400 border-l border-neutral-700">
+          <span className="px-3 text-xs text-neutral-400 border-l border-white/8">
             BTC-LST
           </span>
         </div>
@@ -116,10 +116,10 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
             <button
               key={opt.value}
               onClick={() => setDuration(opt.value)}
-              className={`py-1.5 text-xs rounded-lg border transition-colors ${
+              className={`py-1.5 text-xs rounded-lg border transition-all ${
                 duration === opt.value
-                  ? "border-white text-white bg-neutral-800"
-                  : "border-neutral-700 text-neutral-400 hover:border-neutral-500"
+                  ? "border-[#E8704A]/60 text-white bg-[#E8704A]/10"
+                  : "border-white/10 text-neutral-400 hover:border-white/20 hover:text-white"
               }`}
             >
               {opt.label}
@@ -129,7 +129,7 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
       </div>
 
       {/* Cost Summary */}
-      <div className="bg-neutral-900 rounded-lg p-3 mb-4 space-y-2">
+      <div className="bg-[#0f1117] rounded-xl p-3 mb-4 space-y-2 border border-white/6">
         <div className="flex justify-between text-xs">
           <span className="text-neutral-400">Coverage</span>
           <span>{amountNum > 0 ? `${amountNum} BTC-LST` : "—"}</span>
@@ -142,9 +142,9 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
           <span className="text-neutral-400">Premium Rate</span>
           <span>{ratePercent}%</span>
         </div>
-        <div className="border-t border-neutral-800 pt-2 flex justify-between text-xs font-medium">
+        <div className="border-t border-white/5 pt-2 flex justify-between text-xs font-medium">
           <span className="text-neutral-400">Premium Cost</span>
-          <span>
+          <span className="text-white">
             {isPreviewLoading && amountNum > 0
               ? "Loading..."
               : premiumHuman
@@ -167,7 +167,7 @@ export function BuyCoverForm({ protocol }: { protocol: Protocol }) {
       <button
         onClick={handleBuy}
         disabled={isBusy || isDone || (coverageAmountWei > 0n && !hasEnoughLiquidity)}
-        className="w-full py-2.5 text-sm font-medium bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="btn-primary w-full py-2.5 text-sm font-medium text-white rounded-lg"
       >
         {buttonLabel}
       </button>

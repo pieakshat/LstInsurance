@@ -303,6 +303,11 @@ contract BaseInsuranceHub is OApp, OAppOptionsType3 {
         governor = newGovernor;
     }
 
+    /// @notice Allows owner to update the Starknet destination EID
+    function setStarknetEid(uint32 newEid) external onlyOwner {
+        starknetEid = newEid;
+    }
+
     /// @notice Withdraw accumulated premiums (owner only)
     function withdrawPremiums(address to, uint256 amount) external onlyOwner {
         premiumToken.safeTransfer(to, amount);

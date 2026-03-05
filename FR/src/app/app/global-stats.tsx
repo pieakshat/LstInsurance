@@ -100,33 +100,22 @@ export function GlobalStats() {
   }, [provider]);
 
   const STATS = [
-    {
-      label: "Total TVL",
-      value: stats.loading ? "—" : `${fmtBtc(stats.tvl)} BTC-LST`,
-    },
-    {
-      label: "Active Coverage",
-      value: stats.loading ? "—" : `${fmtBtc(stats.locked)} BTC-LST`,
-    },
-    {
-      label: "Claims Paid",
-      value: stats.loading ? "—" : `${fmtBtc(stats.payouts)} BTC-LST`,
-    },
-    {
-      label: "Active Vaults",
-      value: stats.loading ? "—" : stats.vaultCount.toString(),
-    },
+    { label: "Total TVL",       value: stats.loading ? null : `${fmtBtc(stats.tvl)} BTC-LST` },
+    { label: "Active Coverage", value: stats.loading ? null : `${fmtBtc(stats.locked)} BTC-LST` },
+    { label: "Claims Paid",     value: stats.loading ? null : `${fmtBtc(stats.payouts)} BTC-LST` },
+    { label: "Active Vaults",   value: stats.loading ? null : stats.vaultCount.toString() },
   ];
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
       {STATS.map((s) => (
-        <div
-          key={s.label}
-          className="bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-3"
-        >
-          <p className="text-xs text-neutral-500 mb-0.5">{s.label}</p>
-          <p className="text-sm font-semibold">{s.value}</p>
+        <div key={s.label} className="gradient-border rounded-xl px-4 py-3">
+          <p className="text-xs text-neutral-500 mb-1.5">{s.label}</p>
+          {s.value === null ? (
+            <div className="h-4 w-24 skeleton rounded" />
+          ) : (
+            <p className="text-sm font-semibold text-white">{s.value}</p>
+          )}
         </div>
       ))}
     </div>

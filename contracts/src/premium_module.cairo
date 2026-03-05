@@ -244,11 +244,9 @@ pub mod PremiumModule {
 
             let protocol = registry.get_protocol(protocol_id);
 
-            // Coverage cap enforcement
             let new_total = self.total_active_coverage.read() + coverage_amount;
             assert(new_total <= protocol.coverage_cap, 'Exceeds coverage cap');
 
-            // Solvency check
             let vault_disp = ILstVaultDispatcher { contract_address: self.vault.read() };
             assert(
                 vault_disp.available_liquidity() >= coverage_amount,

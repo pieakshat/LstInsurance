@@ -198,20 +198,21 @@ export function DepositWithdrawForm({
   const txStatus = tab === "deposit" ? depositTx.status : withdrawTx.status;
 
   return (
-    <div className="border border-neutral-800 rounded-xl overflow-hidden">
+    <div className="gradient-border rounded-xl overflow-hidden">
       {/* Tab switcher */}
-      <div className="flex border-b border-neutral-800">
+      <div className="flex border-b border-white/5">
         {(["deposit", "withdraw"] as const).map((t) => (
           <button
             key={t}
             onClick={() => { setTab(t); setAmount(""); }}
-            className={`flex-1 py-3 text-sm font-medium transition-colors ${
-              tab === t
-                ? "text-white bg-neutral-900"
-                : "text-neutral-500 hover:text-neutral-300"
+            className={`flex-1 py-3 text-sm font-medium transition-all relative ${
+              tab === t ? "text-white" : "text-neutral-500 hover:text-neutral-300"
             }`}
           >
             {t === "deposit" ? "Deposit" : "Withdraw"}
+            {tab === t && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#E8704A]" />
+            )}
           </button>
         ))}
       </div>
@@ -230,7 +231,7 @@ export function DepositWithdrawForm({
                   Bal: {btcBalPending ? "..." : `${fmtBtc(btcBalance)} BTC-LST`}
                 </button>
               </div>
-              <div className="flex items-center border border-neutral-700 rounded-lg overflow-hidden focus-within:border-neutral-500 transition-colors">
+              <div className="flex items-center bg-[#0f1117] border border-white/8 rounded-lg overflow-hidden focus-within:border-[#E8704A]/50 transition-colors">
                 <input
                   type="number"
                   min="0"
@@ -240,11 +241,11 @@ export function DepositWithdrawForm({
                   onChange={(e) => setAmount(e.target.value)}
                   className="flex-1 bg-transparent px-3 py-2.5 text-sm text-white placeholder-neutral-600 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
-                <span className="px-3 text-xs text-neutral-400 border-l border-neutral-700">BTC-LST</span>
+                <span className="px-3 text-xs text-neutral-400 border-l border-white/8">BTC-LST</span>
               </div>
             </div>
 
-            <div className="bg-neutral-900 rounded-lg p-3 mb-4 space-y-2">
+            <div className="bg-[#0f1117] border border-white/6 rounded-xl p-3 mb-4 space-y-2">
               <div className="flex justify-between text-xs">
                 <span className="text-neutral-400">You deposit</span>
                 <span>{amountNum > 0 ? `${amountNum} BTC-LST` : "—"}</span>
@@ -253,7 +254,7 @@ export function DepositWithdrawForm({
                 <span className="text-neutral-400">Share price</span>
                 <span>{sharePriceFloat.toFixed(4)} BTC-LST</span>
               </div>
-              <div className="border-t border-neutral-800 pt-2 flex justify-between text-xs font-medium">
+              <div className="border-t border-white/5 pt-2 flex justify-between text-xs font-medium">
                 <span className="text-neutral-400">Shares received</span>
                 <span>{sharesToReceive > 0 ? `~${sharesToReceive.toFixed(4)}` : "—"}</span>
               </div>
@@ -262,7 +263,7 @@ export function DepositWithdrawForm({
             <button
               onClick={handleDeposit}
               disabled={isTxPending || amountNum <= 0}
-              className="w-full py-2.5 text-sm font-medium bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="btn-primary w-full py-2.5 text-sm font-medium text-white rounded-lg"
             >
               {depositTx.status === "pending"
                 ? "Sign in wallet..."
@@ -296,7 +297,7 @@ export function DepositWithdrawForm({
                       Max: {fmtBtc(userShares)}
                     </button>
                   </div>
-                  <div className="flex items-center border border-neutral-700 rounded-lg overflow-hidden focus-within:border-neutral-500 transition-colors">
+                  <div className="flex items-center bg-[#0f1117] border border-white/8 rounded-lg overflow-hidden focus-within:border-[#E8704A]/50 transition-colors">
                     <input
                       type="number"
                       min="0"
@@ -306,11 +307,11 @@ export function DepositWithdrawForm({
                       onChange={(e) => setAmount(e.target.value)}
                       className="flex-1 bg-transparent px-3 py-2.5 text-sm text-white placeholder-neutral-600 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
-                    <span className="px-3 text-xs text-neutral-400 border-l border-neutral-700">Shares</span>
+                    <span className="px-3 text-xs text-neutral-400 border-l border-white/8">Shares</span>
                   </div>
                 </div>
 
-                <div className="bg-neutral-900 rounded-lg p-3 mb-4 space-y-2">
+                <div className="bg-[#0f1117] border border-white/6 rounded-xl p-3 mb-4 space-y-2">
                   <div className="flex justify-between text-xs">
                     <span className="text-neutral-400">You redeem</span>
                     <span>{amountNum > 0 ? `${amountNum} shares` : "—"}</span>
@@ -323,7 +324,7 @@ export function DepositWithdrawForm({
                     <span className="text-neutral-400">Pool available</span>
                     <span>{fmtBtc(availableLiquidity)} BTC-LST</span>
                   </div>
-                  <div className="border-t border-neutral-800 pt-2 flex justify-between text-xs font-medium">
+                  <div className="border-t border-white/5 pt-2 flex justify-between text-xs font-medium">
                     <span className="text-neutral-400">BTC-LST received</span>
                     <span>{assetsToReceive > 0 ? `~${assetsToReceive.toFixed(6)}` : "—"}</span>
                   </div>
@@ -338,7 +339,7 @@ export function DepositWithdrawForm({
                 <button
                   onClick={handleWithdraw}
                   disabled={isTxPending || amountNum <= 0}
-                  className="w-full py-2.5 text-sm font-medium bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="btn-primary w-full py-2.5 text-sm font-medium text-white rounded-lg"
                 >
                   {withdrawTx.status === "pending"
                     ? "Sign in wallet..."
@@ -356,7 +357,7 @@ export function DepositWithdrawForm({
 
         {/* Tx status indicator */}
         {(txStatus === "done") && (
-          <p className="text-xs text-emerald-400 mt-2">Transaction confirmed</p>
+          <p className="text-xs text-neutral-400 mt-2">Transaction confirmed.</p>
         )}
       </div>
     </div>

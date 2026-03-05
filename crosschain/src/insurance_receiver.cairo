@@ -42,25 +42,25 @@ pub mod InsuranceReceiver {
     pub const MSG_UNLOCK_COVERAGE: u8 = 0x02;
     pub const MSG_PAYOUT_CLAIM: u8 = 0x03;
 
-    // ── Components ──
+
     component!(path: OAppCoreComponent, storage: oapp_core, event: OAppCoreEvent);
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
 
-    // OAppCore - exposes set_peer, get_peer, set_delegate, endpoint
+
     #[abi(embed_v0)]
     impl OAppCoreImpl = OAppCoreComponent::OAppCoreImpl<ContractState>;
     impl OAppCoreInternalImpl = OAppCoreComponent::InternalImpl<ContractState>;
 
-    // Exposes lz_receive to the LayerZero Endpoint
+
     #[abi(embed_v0)]
     impl ILayerZeroReceiverImpl =
         OAppCoreComponent::LayerZeroReceiverImpl<ContractState>;
 
-    // Exposes oapp_version for the receiver interface
+
     #[abi(embed_v0)]
     impl IOAppReceiverImpl = OAppCoreComponent::OAppReceiverImpl<ContractState>;
 
-    // Ownable
+
     #[abi(embed_v0)]
     impl OwnableImpl = OwnableComponent::OwnableImpl<ContractState>;
     impl OwnableInternalImpl = OwnableComponent::InternalImpl<ContractState>;

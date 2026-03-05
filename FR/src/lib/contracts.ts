@@ -1,10 +1,10 @@
 import { Contract, type Abi, type ProviderInterface } from "starknet";
 
 export const CONTRACTS = {
-  registry: "0x063496b0409b179d6ec465f6e0c9936a41d3a71d4e4e0f3f743d78ca258a17cb",
-  factory: "0x05a1cf3518bb1ea5e9eb9c8d62c58087062d3f566c65849f2343eeaed8df4359",
-  coverageToken: "0x05b4b86e8073af4ad322233f9ef614cab93eb721cb72feca4d8c605913c9a2a3",
-  claimsManager: "0x0", // not yet deployed
+  registry:      "0x0563e74e88ce4cdf5ddf734e62fff92057a52a910d7d9b000c539dd41154ffb9",
+  factory:       "0x01c96db2bb1b22769d99bac9f1a65f93a21ac8e6fc264bb400971054a5971a6c",
+  coverageToken: "0x07a14e6784c54b06fafcb3242da1e12ed4ea8dbfca2fa36acae2ecdcf0bae118",
+  claimsManager: "0x0",
 } as const;
 
 // Per-protocol addresses (vault, premiumModule) come from Protocol type

@@ -4,7 +4,7 @@ import type { Protocol } from "@/lib/types";
 
 export function CoverDetails({ protocol }: { protocol: Protocol }) {
   return (
-    <div className="border border-neutral-800 rounded-xl p-5 space-y-4">
+    <div className="gradient-border rounded-xl p-5 space-y-4">
       <h2 className="text-base font-semibold">Cover Details</h2>
 
       <section>

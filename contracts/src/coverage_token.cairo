@@ -152,7 +152,6 @@ pub mod CoverageToken {
         self.access_control._grant_role(OWNER_ROLE, owner);
         self.access_control._grant_role(MINTER_ROLE, owner);
 
-        // Token IDs start at 1 (0 = non-existent)
         self.next_token_id.write(1);
     }
 
@@ -231,7 +230,6 @@ pub mod CoverageToken {
             self.access_control.assert_only_role(BURNER_ROLE);
             assert(self.erc721.exists(token_id), 'Token does not exist');
 
-            // Swap-and-pop: move last token into the burned slot, shrink count
             let owner = self.erc721.ERC721_owners.entry(token_id).read();
             let burn_idx = self.token_owner_index.entry(token_id).read();
             let last_idx = self.owner_token_count.entry(owner).read() - 1;

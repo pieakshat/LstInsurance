@@ -1,0 +1,22 @@
+{
+  "network": "starknet-sepolia",
+  "owner": "0x027C634b51996243FF0f9b516E1E5D24432be0eB9118114c9a356C0378D60770",
+
+  "class_hashes": {
+    "MockERC20":             "0x02b488f63133e09edb0e1af1103562e5bbc5644bc1cda6828af71b5c31454c2b",
+    "ProtocolRegistry":      "0x00a0f72536abce9cd219498db119c46b2636920bf03508f95d39216af29ad8da",
+    "CoverageToken":         "0x02523afe7a6986ee126ba69ece78efa5b36969130fd5bb7aab18f0824cf091e4",
+    "LstVault":              "0x06267345c81110cf7707959a9ff8adc91d63965ed8ba55234dd78ec1c96e65e3",
+    "PremiumModule":         "0x044c997eecd488f907ec431db749aa867c4a47546853870841d6e8a295214ae5",
+    "ClaimsManager":         "0x04b830daee7cec37e3c3ea1db53f999dd58f3f3eb779e2dc446683786e6b4dcf",
+    "InsuranceVaultFactory": "0x00d01045eaeefd225e4efefff23f0e0d6ef76a63776f0c042947d743a3bb543b"
+  },
+
+  "singletons": {
+    "MockUSDC":              "0x04621e68e8784928870a619f405e807cf061096f301eb8b7c1fee7dc35bef91a",
+    "LSTBTC":                "0x02579f9dc11305ff5b300babde1ee79176a6d58c0f0a022c992ce3f8195b65ee",
+    "ProtocolRegistry":      "0x0563e74e88ce4cdf5ddf734e62fff92057a52a910d7d9b000c539dd41154ffb9",
+    "CoverageToken":         "0x07a14e6784c54b06fafcb3242da1e12ed4ea8dbfca2fa36acae2ecdcf0bae118",
+    "InsuranceVaultFactory": "0x01c96db2bb1b22769d99bac9f1a65f93a21ac8e6fc264bb400971054a5971a6c"
+  }
+}

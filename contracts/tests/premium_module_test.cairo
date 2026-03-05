@@ -46,9 +46,6 @@ const DURATION_90_DAYS: u64 = 7776000;
 const LP_DEPOSIT: u256 = 200_000_000_000_000_000_000; // 200e18
 const BASE_TIME: u64 = 1000000;
 
-// ───────────────────────────────────────────────
-// Deploy helpers
-// ───────────────────────────────────────────────
 
 fn deploy_mock_erc20() -> ContractAddress {
     let contract = declare("MockERC20").unwrap().contract_class();
@@ -179,9 +176,6 @@ fn deposit_lp(
     stop_cheat_caller_address(vault_addr);
 }
 
-// ═══════════════════════════════════════════════
-// DEPLOY & VIEW TESTS
-// ═══════════════════════════════════════════════
 
 #[test]
 fn test_premium_deploy() {

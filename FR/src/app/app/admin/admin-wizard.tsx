@@ -46,9 +46,9 @@ const STEP_LABELS = [
 const STORAGE_KEY = "strk-insurance-admin-config";
 
 const DEFAULT_CONFIG: SystemConfig = {
-  registry:        "0x063496b0409b179d6ec465f6e0c9936a41d3a71d4e4e0f3f743d78ca258a17cb",
-  factory:         "0x05a1cf3518bb1ea5e9eb9c8d62c58087062d3f566c65849f2343eeaed8df4359",
-  coverageToken:   "0x05b4b86e8073af4ad322233f9ef614cab93eb721cb72feca4d8c605913c9a2a3",
+  registry:        "0x0563e74e88ce4cdf5ddf734e62fff92057a52a910d7d9b000c539dd41154ffb9",
+  factory:         "0x01c96db2bb1b22769d99bac9f1a65f93a21ac8e6fc264bb400971054a5971a6c",
+  coverageToken:   "0x07a14e6784c54b06fafcb3242da1e12ed4ea8dbfca2fa36acae2ecdcf0bae118",
   underlyingAsset: "0x02579f9dc11305ff5b300babde1ee79176a6d58c0f0a022c992ce3f8195b65ee",
   premiumAsset:    "0x04621e68e8784928870a619f405e807cf061096f301eb8b7c1fee7dc35bef91a",
 };

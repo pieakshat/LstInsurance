@@ -127,16 +127,16 @@ export function YourPositions() {
     return (
       <div className="space-y-3">
         {[1, 2].map((i) => (
-          <div key={i} className="border border-neutral-800 rounded-xl p-5 animate-pulse">
+          <div key={i} className="gradient-border rounded-xl p-5">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-full bg-neutral-800" />
+              <div className="w-9 h-9 rounded-full skeleton" />
               <div className="space-y-1.5">
-                <div className="h-4 w-32 bg-neutral-800 rounded" />
-                <div className="h-3 w-20 bg-neutral-800 rounded" />
+                <div className="h-4 w-32 skeleton rounded" />
+                <div className="h-3 w-20 skeleton rounded" />
               </div>
             </div>
             <div className="grid grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map((j) => <div key={j} className="h-10 bg-neutral-800 rounded" />)}
+              {[1, 2, 3, 4].map((j) => <div key={j} className="h-10 skeleton rounded" />)}
             </div>
           </div>
         ))}
@@ -169,12 +169,12 @@ export function YourPositions() {
           : "0.00";
 
         return (
-          <div key={pos.protocol_id} className="border border-neutral-800 rounded-xl p-5">
+          <div key={pos.protocol_id} className="gradient-border rounded-xl p-5 transition-all duration-200">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 {pos.logo_url
-                  ? <img src={pos.logo_url} alt={pos.protocol_name} className="w-9 h-9 rounded-full bg-neutral-800" />
-                  : <div className="w-9 h-9 rounded-full bg-neutral-800" />}
+                  ? <img src={pos.logo_url} alt={pos.protocol_name} className="w-9 h-9 rounded-full bg-white/5" />
+                  : <div className="w-9 h-9 rounded-full bg-white/5" />}
                 <div>
                   <p className="font-medium text-sm">{pos.protocol_name}</p>
                   <p className="text-xs text-neutral-500">
@@ -184,7 +184,7 @@ export function YourPositions() {
               </div>
               <Link
                 href={`/app/lp/${pos._id}`}
-                className="text-xs px-3 py-1.5 border border-neutral-700 rounded-lg hover:border-neutral-500 transition-colors"
+                className="text-xs px-3 py-1.5 border border-white/10 rounded-lg text-neutral-400 hover:text-white hover:border-white/20 transition-all"
               >
                 Manage
               </Link>

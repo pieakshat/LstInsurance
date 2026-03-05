@@ -26,40 +26,40 @@ export function ProtocolDetailClient({ protocolId }: { protocolId: string }) {
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto">
-        <div className="h-5 w-40 bg-neutral-800 rounded mb-8 animate-pulse" />
+        <div className="h-5 w-40 skeleton rounded mb-8" />
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3 space-y-6">
-            <div className="border border-neutral-800 rounded-xl p-6 animate-pulse">
+            <div className="gradient-border rounded-xl p-6">
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-14 h-14 rounded-full bg-neutral-800" />
+                <div className="w-14 h-14 rounded-full skeleton" />
                 <div className="space-y-2">
-                  <div className="h-5 w-48 bg-neutral-800 rounded" />
-                  <div className="h-4 w-32 bg-neutral-800 rounded" />
+                  <div className="h-5 w-48 skeleton rounded" />
+                  <div className="h-4 w-32 skeleton rounded" />
                 </div>
               </div>
-              <div className="h-4 w-full bg-neutral-800 rounded mb-3" />
-              <div className="h-4 w-3/4 bg-neutral-800 rounded mb-6" />
+              <div className="h-4 w-full skeleton rounded mb-3" />
+              <div className="h-4 w-3/4 skeleton rounded mb-6" />
               <div className="grid grid-cols-3 gap-4">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-16 bg-neutral-800 rounded-lg" />
+                  <div key={i} className="h-16 skeleton rounded-lg" />
                 ))}
               </div>
             </div>
-            <div className="border border-neutral-800 rounded-xl p-5 animate-pulse space-y-4">
+            <div className="gradient-border rounded-xl p-5 space-y-4">
               {[1, 2, 3, 4].map((i) => (
                 <div key={i}>
-                  <div className="h-3 w-24 bg-neutral-800 rounded mb-2" />
-                  <div className="h-3 w-full bg-neutral-800 rounded" />
+                  <div className="h-3 w-24 skeleton rounded mb-2" />
+                  <div className="h-3 w-full skeleton rounded" />
                 </div>
               ))}
             </div>
           </div>
           <div className="lg:col-span-2">
-            <div className="border border-neutral-800 rounded-xl p-5 animate-pulse">
-              <div className="h-5 w-24 bg-neutral-800 rounded mb-4" />
-              <div className="h-10 bg-neutral-800 rounded mb-4" />
-              <div className="h-8 bg-neutral-800 rounded mb-4" />
-              <div className="h-32 bg-neutral-800 rounded" />
+            <div className="gradient-border rounded-xl p-5">
+              <div className="h-5 w-24 skeleton rounded mb-4" />
+              <div className="h-10 skeleton rounded mb-4" />
+              <div className="h-8 skeleton rounded mb-4" />
+              <div className="h-32 skeleton rounded" />
             </div>
           </div>
         </div>
@@ -96,18 +96,18 @@ export function ProtocolDetailClient({ protocolId }: { protocolId: string }) {
         {/* Left column — protocol info + cover details */}
         <div className="lg:col-span-3 space-y-6">
           {/* Protocol Header */}
-          <div className="border border-neutral-800 rounded-xl p-5">
+          <div className="gradient-border rounded-xl p-5">
             <div className="flex items-center gap-4 mb-4">
               <img
                 src={protocol.logo_url}
                 alt={protocol.protocol_name}
-                className="w-14 h-14 rounded-full bg-neutral-800"
+                className="w-14 h-14 rounded-full bg-white/5"
               />
               <div>
                 <h1 className="text-xl font-bold">{protocol.protocol_name}</h1>
                 <p className="text-sm text-neutral-400">{protocol.insurance_name}</p>
               </div>
-              <span className="ml-auto text-xs px-2.5 py-1 bg-neutral-800 rounded-full text-neutral-300">
+              <span className="ml-auto text-xs text-neutral-500">
                 {protocol.chain}
               </span>
             </div>
@@ -115,17 +115,17 @@ export function ProtocolDetailClient({ protocolId }: { protocolId: string }) {
             <p className="text-sm text-neutral-400 mb-5">{protocol.description}</p>
 
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-neutral-900 rounded-lg p-3">
+              <div className="bg-[#0f1117] rounded-lg p-3">
                 <p className="text-xs text-neutral-500 mb-1">Premium Rate</p>
-                <p className="text-sm font-semibold">{ratePercent}%</p>
+                <p className="text-sm font-semibold text-white">{ratePercent}% / yr</p>
               </div>
-              <div className="bg-neutral-900 rounded-lg p-3">
+              <div className="bg-[#0f1117] rounded-lg p-3">
                 <p className="text-xs text-neutral-500 mb-1">Coverage Cap</p>
-                <p className="text-sm font-semibold">{formatWei(protocol.coverage_cap)}</p>
+                <p className="text-sm font-semibold text-white">{formatWei(protocol.coverage_cap)} BTC-LST</p>
               </div>
-              <div className="bg-neutral-900 rounded-lg p-3">
+              <div className="bg-[#0f1117] rounded-lg p-3">
                 <p className="text-xs text-neutral-500 mb-1">Vault</p>
-                <p className="text-sm font-semibold font-mono">
+                <p className="text-sm font-semibold font-mono text-neutral-300">
                   {shortenAddress(protocol.vault_address)}
                 </p>
               </div>
