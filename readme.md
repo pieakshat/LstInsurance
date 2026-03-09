@@ -2,7 +2,7 @@
 
 **Website:** https://lst-insurance.vercel.app/ | **Docs:** https://lst-insurance.vercel.app/docs 
 
-A decentralized insurance protocol built on Starknet. Users buy coverage for their DeFi positions (e.g. deposits into a lending protocol), paying premiums in USDC. Liquidity Providers deposit BTC-LST into underwriting vaults and earn those premiums as yield. Claims are reviewed by a governance layer and paid out in BTC-LST.
+An insurance protocol built on Starknet. Users buy coverage for their DeFi positions (e.g. deposits into a lending protocol), paying premiums in USDC. Liquidity Providers deposit BTC-LST into underwriting vaults and earn those premiums as yield. Claims are reviewed by a governance layer and paid out in BTC-LST.
 
 The protocol also has a cross-chain extension — users on Base (EVM) can buy coverage that triggers vault operations on Starknet via LayerZero V2.
 
