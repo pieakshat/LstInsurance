@@ -103,8 +103,7 @@ contract BaseInsuranceHub is OApp, OAppOptionsType3 {
     }
 
     function _lzOptions() internal pure returns (bytes memory) {
-        return
-            OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
+        return OptionsBuilder.newOptions();
     }
 
     function _send(bytes memory message) internal {

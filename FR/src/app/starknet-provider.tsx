@@ -7,6 +7,7 @@ import {
   jsonRpcProvider,
   argent,
   braavos,
+  useInjectedConnectors,
 } from "@starknet-react/core";
 import { ReactNode } from "react";
 
@@ -16,9 +17,13 @@ function rpc() {
   };
 }
 
-const connectors = [argent(), braavos()];
-
 export function StarknetProvider({ children }: { children: ReactNode }) {
+  const { connectors } = useInjectedConnectors({
+    recommended: [argent(), braavos()],
+    includeRecommended: "always",
+    order: "alphabetical",
+  });
+
   return (
     <StarknetConfig
       chains={[sepolia]}

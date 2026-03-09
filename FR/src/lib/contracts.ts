@@ -1,9 +1,9 @@
 import { Contract, type Abi, type ProviderInterface } from "starknet";
 
 export const CONTRACTS = {
-  registry:      "0x0563e74e88ce4cdf5ddf734e62fff92057a52a910d7d9b000c539dd41154ffb9",
-  factory:       "0x01c96db2bb1b22769d99bac9f1a65f93a21ac8e6fc264bb400971054a5971a6c",
-  coverageToken: "0x07a14e6784c54b06fafcb3242da1e12ed4ea8dbfca2fa36acae2ecdcf0bae118",
+  registry:      "0x0493ff23ec196924e7facfba6b351b9e40c906c280f48dc1892b113b6442ad0a",
+  factory:       "0x0293d696a31a5755e5e625e83f797a8e9075037bd868f51d3eee8480a099fc02",
+  coverageToken: "0x0648a1f37af0adeea21180c08e1ddd5002561f50cee547ed9bf56588153c9319",
   claimsManager: "0x0",
 } as const;
 

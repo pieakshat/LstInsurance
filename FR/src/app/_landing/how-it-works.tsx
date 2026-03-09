@@ -21,18 +21,18 @@ function useInView(threshold = 0.2) {
 const STEPS = [
   {
     number: "01",
-    title: "Pick a protocol",
-    body: "Browse covered DeFi protocols — Aave, Uniswap, Curve and more. Each protocol has its own coverage pool with transparent parameters.",
+    title: "Choose a protocol",
+    body: "Browse supported DeFi protocols — Aave, Nostra, Endur and more. Each protocol has its own coverage pool with transparent risk parameters.",
   },
   {
     number: "02",
     title: "Buy coverage",
-    body: "Pay a small USDC premium and receive a coverage NFT on Starknet. Your position is recorded on-chain — no account needed.",
+    body: "Pay a small USDC premium and receive your coverage NFT instantly on Starknet.",
   },
   {
     number: "03",
     title: "Get paid if it fails",
-    body: "If the protocol is exploited, submit your claim on-chain. Governance reviews and triggers automatic BTC-LST payout directly to your wallet.",
+    body: "If a protocol is exploited, submit your claim on-chain. Once approved, payouts are sent directly from the BTC-backed insurance vault to your wallet.",
   },
 ];
 

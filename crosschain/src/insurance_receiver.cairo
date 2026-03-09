@@ -175,7 +175,6 @@ pub mod InsuranceReceiver {
         ) {
             let mut contract = self.get_contract_mut();
 
-            // Decode message type (first byte)
             let (offset, msg_type) = message.read_u8(0);
 
             if msg_type == MSG_LOCK_COVERAGE {

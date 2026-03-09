@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/app/submit-claim", label: "Submit a Claim" },
   { href: "/app/governance", label: "Governance" },
   { href: "/app/admin", label: "Admin" },
+  { href: "/app/faucet", label: "Faucet" },
 ] as const;
 
 export function NavLinks() {
@@ -28,11 +29,10 @@ export function NavLinks() {
             <Link
               key={href}
               href={href}
-              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                isActive
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${isActive
                   ? "text-white bg-white/8"
                   : "text-neutral-400 hover:text-white hover:bg-white/5"
-              }`}
+                }`}
             >
               {label}
             </Link>
@@ -91,11 +91,10 @@ export function NavLinks() {
                   key={href}
                   href={href}
                   onClick={() => setOpen(false)}
-                  className={`px-3 py-2 text-sm rounded-md transition-all ${
-                    isActive
+                  className={`px-3 py-2 text-sm rounded-md transition-all ${isActive
                       ? "text-white bg-white/8"
                       : "text-neutral-400 hover:text-white hover:bg-white/5"
-                  }`}
+                    }`}
                 >
                   {label}
                 </Link>

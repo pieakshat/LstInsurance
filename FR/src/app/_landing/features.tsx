@@ -30,25 +30,25 @@ const FEATURES = [
   {
     icon: <ChainIcon />,
     title: "Fully on-chain",
-    body: "Every policy, every claim, every payout lives on Starknet. No off-chain black boxes, no multisig delays.",
+    body: "Policies, claims, and payouts are executed entirely on Starknet. Transparent, verifiable, and free from off-chain intermediaries.",
     accent: "#E8704A",
   },
   {
     icon: <BTCIcon />,
-    title: "BTC-native",
-    body: "Coverage is backed by BTC-LST and denominated in Bitcoin. Your protection moves with the asset you're protecting.",
+    title: "Bitcoin-backed",
+    body: "Coverage is secured by BTC-LST liquidity. Your protection is backed by the strongest asset in crypto.",
     accent: "#F7931A",
   },
   {
     icon: <LightningIcon />,
-    title: "Instant settlement",
-    body: "Approved claims trigger automatic BTC-LST transfer to your wallet. No manual disbursements, no waiting.",
+    title: "Fast settlement",
+    body: "Once a claim is approved, payouts are executed directly from the vault to your wallet.",
     accent: "#60A5FA",
   },
   {
     icon: <LockOpenIcon />,
-    title: "No KYC, ever",
-    body: "Connect your wallet and you're done. Permissionless access to insurance for everyone, everywhere.",
+    title: "Permissionless",
+    body: "No KYC, no paperwork. Connect your wallet and access insurance instantly.",
     accent: "#34D399",
   },
 ];

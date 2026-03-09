@@ -21,22 +21,22 @@ export function Hero() {
           {/* ── Left: copy ─────────────────────────────────────────────────── */}
           <div className="flex flex-col items-start">
             {/* Badge */}
-            <div className="flex items-center gap-2 mb-6 px-3 py-1.5 rounded-full border border-[#E8704A]/25 bg-[#E8704A]/8">
+            {/* <div className="flex items-center gap-2 mb-6 px-3 py-1.5 rounded-full border border-[#E8704A]/25 bg-[#E8704A]/8">
               <span className="w-1.5 h-1.5 rounded-full bg-[#E8704A]" style={{ animation: "dot-pulse 2s ease-in-out infinite" }} />
               <span className="text-xs font-medium text-[#E8704A] tracking-wide">On-chain Insurance · Starknet</span>
-            </div>
+            </div> */}
 
             {/* Headline */}
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold leading-[1.05] tracking-tight mb-6">
-              Your BTC in DeFi,
+              Your DeFi investments,
               <br />
-              <span className="text-[#E8704A]">protected.</span>
+              <span className="text-[#E8704A]">protected by Bitcoin </span>
             </h1>
 
             {/* Subtext */}
             <p className="text-lg text-neutral-400 leading-relaxed mb-10 max-w-md">
-              BitCover gives you on-chain coverage for your BTC positions across DeFi protocols.
-              Buy in seconds, settle claims entirely on-chain. No custodians, no paperwork.
+              BitCover provides on-chain insurance for your DeFi positions, backed by BTC LST liquidity.
+              Buy coverage in seconds and settle claims entirely on-chain — no custodians, no paperwork.
             </p>
 
             {/* CTAs */}
@@ -57,7 +57,7 @@ export function Hero() {
 
             {/* Social proof micro-line */}
             <p className="mt-8 text-xs text-neutral-600">
-              Powered by Starknet · Audited · Non-custodial
+              Powered by Starknet · Non-custodial
             </p>
           </div>
 
