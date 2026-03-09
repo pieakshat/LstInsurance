@@ -1,4 +1,4 @@
-# STRK Insurance
+# BitCover
 
 A decentralized insurance protocol built on Starknet. Users buy coverage for their DeFi positions (e.g. deposits into a lending protocol), paying premiums in USDC. Liquidity Providers deposit BTC-LST into underwriting vaults and earn those premiums as yield. Claims are reviewed by a governance layer and paid out in BTC-LST.
 
