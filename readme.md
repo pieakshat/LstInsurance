@@ -333,6 +333,7 @@ factory.create_vault(protocol_id, name, symbol, underlying_asset)
 ---
 
 ## Cross-Chain Extension (Base → Starknet)
+[The LayerZero oApp contracts for cross-chain functionality have been deployed. However, end-to-end testing could not be completed because the required LayerZero configuration has not yet been finalized by the LayerZero team.
 
 The protocol has a cross-chain layer allowing users on Base (EVM) to buy insurance coverage. Coverage purchases on Base are bridged to Starknet via **LayerZero V2**, where the actual vault capital locking happens.
 
