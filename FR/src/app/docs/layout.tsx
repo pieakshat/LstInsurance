@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { WalletBar } from "./wallet-bar";
-import { NavLinks } from "./nav-links";
-import { ToastProvider } from "./toast";
+import { WalletBar } from "../app/wallet-bar";
+import { NavLinks } from "../app/nav-links";
+import { ToastProvider } from "../app/toast";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default function DocsLayout({ children }: { children: React.ReactNode }) {
   return (
     <ToastProvider>
       <div className="min-h-screen flex flex-col">

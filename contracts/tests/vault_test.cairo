@@ -145,12 +145,14 @@ fn setup_factory() -> (ContractAddress, ContractAddress, ContractAddress, Contra
     // Declare contract classes for factory to deploy
     let vault_class = declare("LstVault").unwrap().contract_class();
     let premium_class = declare("PremiumModule").unwrap().contract_class();
+    let claims_class = declare("ClaimsManager").unwrap().contract_class();
     let factory_class = declare("InsuranceVaultFactory").unwrap().contract_class();
 
     let mut calldata: Array<felt252> = array![];
     registry_addr.serialize(ref calldata);
     (*vault_class.class_hash).serialize(ref calldata);
     (*premium_class.class_hash).serialize(ref calldata);
+    (*claims_class.class_hash).serialize(ref calldata);
     coverage_token_addr.serialize(ref calldata);
     asset_addr.serialize(ref calldata); // premium_asset (mock USDC; reuse asset here for tests)
     OWNER().serialize(ref calldata);

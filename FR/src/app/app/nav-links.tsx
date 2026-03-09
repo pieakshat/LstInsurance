@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/app/governance", label: "Governance" },
   { href: "/app/admin", label: "Admin" },
   { href: "/app/faucet", label: "Faucet" },
+  { href: "/docs", label: "Docs" },
 ] as const;
 
 export function NavLinks() {

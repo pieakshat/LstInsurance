@@ -22,6 +22,7 @@ export function Nav() {
         <a href="#how-it-works" className="hover:text-white transition-colors">How it works</a>
         <a href="#features"     className="hover:text-white transition-colors">Features</a>
         <a href="#for-lps"      className="hover:text-white transition-colors">For LPs</a>
+        <Link href="/docs"  className="hover:text-white transition-colors">Docs</Link>
       </nav>
 
       {/* Desktop CTA */}
@@ -71,6 +72,13 @@ export function Nav() {
               {label}
             </a>
           ))}
+          <Link
+            href="/docs"
+            onClick={() => setOpen(false)}
+            className="px-2 py-2.5 text-sm text-neutral-300 hover:text-white transition-colors"
+          >
+            Docs
+          </Link>
           <Link
             href="/app"
             className="mt-1 text-center text-sm px-5 py-2.5 rounded-lg bg-[#E8704A] text-white font-medium"
