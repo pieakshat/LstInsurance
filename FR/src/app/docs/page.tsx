@@ -1,137 +1,114 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
-// ── Sidebar sections ──────────────────────────────────────────────────────────
+// ── Nav tree ──────────────────────────────────────────────────────────────────
 
-const SECTIONS = [
+const NAV = [
   {
-    label: "Getting Started",
+    group: "Getting Started",
     items: [
-      { id: "what-is-strk", label: "What is BitCover?" },
-      { id: "how-it-works", label: "How It Works" },
-      { id: "key-concepts", label: "Key Concepts" },
+      { id: "introduction", label: "Introduction" },
+      { id: "concepts", label: "Core Concepts" },
     ],
   },
   {
-    label: "User Guides",
+    group: "Guides",
     items: [
-      { id: "buy-coverage", label: "Buying Coverage" },
-      { id: "provide-liquidity", label: "Providing Liquidity" },
-      { id: "claim-premiums", label: "Claiming LP Premiums" },
-      { id: "submit-claim", label: "Submitting a Claim" },
-      { id: "faucet", label: "Testnet Faucet" },
+      { id: "buy-coverage", label: "Buy Coverage" },
+      { id: "provide-liquidity", label: "Provide Liquidity" },
+      { id: "file-a-claim", label: "File a Claim" },
     ],
   },
   {
-    label: "Technical Architecture",
+    group: "Protocol",
     items: [
-      { id: "arch-overview", label: "System Overview" },
-      { id: "protocol-registry", label: "ProtocolRegistry" },
-      { id: "lst-vault", label: "LstVault" },
-      { id: "premium-module", label: "PremiumModule" },
-      { id: "coverage-token", label: "CoverageToken" },
-      { id: "claims-manager", label: "ClaimsManager" },
-      { id: "vault-factory", label: "VaultFactory" },
+      { id: "architecture", label: "Architecture" },
+      { id: "cross-chain", label: "Cross-Chain" },
+      { id: "security", label: "Security & Trust" },
     ],
   },
   {
-    label: "Cross-Chain",
+    group: "Reference",
     items: [
-      { id: "crosschain-overview", label: "Overview" },
-      { id: "crosschain-evm", label: "EVM Side (Base)" },
-      { id: "crosschain-starknet", label: "Starknet Receiver" },
-      { id: "message-encoding", label: "Message Encoding" },
-    ],
-  },
-  {
-    label: "Reference",
-    items: [
-      { id: "deployed-addresses", label: "Deployed Addresses" },
-      { id: "premium-formula", label: "Premium Formula" },
+      { id: "faq", label: "FAQ" },
+      { id: "developer", label: "Developer Reference" },
     ],
   },
 ];
 
-// ── Small reusable components ─────────────────────────────────────────────────
+const ALL_ITEMS = NAV.flatMap((g) => g.items);
 
-function H2({ id, children }: { id: string; children: React.ReactNode }) {
-  return (
-    <h2 id={id} className="text-xl font-bold text-white mb-3 scroll-mt-24">
-      {children}
-    </h2>
-  );
+// ── Page content map ───────────────────────────────────────────────────────────
+
+type PageId =
+  | "introduction"
+  | "concepts"
+  | "buy-coverage"
+  | "provide-liquidity"
+  | "file-a-claim"
+  | "architecture"
+  | "cross-chain"
+  | "security"
+  | "faq"
+  | "developer";
+
+// ── Primitives ────────────────────────────────────────────────────────────────
+
+function Prose({ children }: { children: React.ReactNode }) {
+  return <p className="text-[15px] text-neutral-400 leading-[1.75] mb-4">{children}</p>;
+}
+
+function H1({ children }: { children: React.ReactNode }) {
+  return <h1 className="text-2xl font-bold text-white mb-1">{children}</h1>;
+}
+
+function H2({ children }: { children: React.ReactNode }) {
+  return <h2 className="text-lg font-semibold text-white mt-10 mb-3">{children}</h2>;
 }
 
 function H3({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-base font-semibold text-white mt-6 mb-2">{children}</h3>;
+  return <h3 className="text-sm font-semibold text-white mt-6 mb-2">{children}</h3>;
 }
 
-function P({ children }: { children: React.ReactNode }) {
-  return <p className="text-neutral-400 text-sm leading-relaxed mb-3">{children}</p>;
-}
-
-function Code({ children }: { children: React.ReactNode }) {
+function Ic({ children }: { children: React.ReactNode }) {
   return (
-    <code className="bg-white/6 text-[#E8704A] text-xs px-1.5 py-0.5 rounded font-mono">
+    <code className="text-[#E8704A] bg-[#E8704A]/10 text-[12px] px-1.5 py-0.5 rounded font-mono">
       {children}
     </code>
   );
 }
 
-function Pre({ children }: { children: string }) {
+function CodeBlock({ children }: { children: string }) {
   return (
-    <pre className="bg-[#0a0c10] border border-white/8 rounded-xl p-4 text-xs text-neutral-300 font-mono overflow-x-auto mb-4 leading-relaxed whitespace-pre">
+    <pre className="bg-[#0d0f14] rounded-lg p-4 text-[12px] text-neutral-300 font-mono overflow-x-auto mb-5 leading-[1.7] whitespace-pre border border-white/5">
       {children}
     </pre>
   );
 }
 
-function Step({
-  n,
-  title,
-  children,
-}: {
-  n: number;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex gap-4 mb-5">
-      <div className="shrink-0 w-7 h-7 rounded-full bg-[#E8704A]/15 border border-[#E8704A]/30 flex items-center justify-center text-xs font-bold text-[#E8704A]">
-        {n}
-      </div>
-      <div>
-        <p className="text-sm font-semibold text-white mb-1">{title}</p>
-        <div className="text-sm text-neutral-400 leading-relaxed">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function Callout({
+function Hint({
   type = "info",
   children,
 }: {
   type?: "info" | "warning" | "tip";
   children: React.ReactNode;
 }) {
-  const styles = {
-    info: "bg-blue-500/8 border-blue-500/20 text-blue-300",
-    warning: "bg-amber-500/8 border-amber-500/20 text-amber-300",
-    tip: "bg-[#E8704A]/8 border-[#E8704A]/20 text-[#E8704A]",
-  };
-  const icons = { info: "ℹ", warning: "⚠", tip: "💡" };
+  const border = { info: "border-blue-500/40", warning: "border-amber-500/40", tip: "border-[#E8704A]/40" };
+  const text = { info: "text-blue-300", warning: "text-amber-300", tip: "text-[#E8704A]" };
+  const label = { info: "Note", warning: "Warning", tip: "Tip" };
   return (
-    <div className={`border rounded-xl px-4 py-3 text-sm mb-4 leading-relaxed ${styles[type]}`}>
-      <span className="mr-2">{icons[type]}</span>
-      {children}
+    <div className={`border-l-2 ${border[type]} pl-4 py-0.5 mb-5`}>
+      <p className={`text-[12px] font-semibold uppercase tracking-wider mb-1 ${text[type]}`}>
+        {label[type]}
+      </p>
+      <div className="text-[14px] text-neutral-400 leading-relaxed">{children}</div>
     </div>
   );
 }
 
-function Table({
+function DataTable({
   headers,
   rows,
 }: {
@@ -139,12 +116,12 @@ function Table({
   rows: (string | React.ReactNode)[][];
 }) {
   return (
-    <div className="overflow-x-auto mb-4">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto mb-5 rounded-lg border border-white/6">
+      <table className="w-full text-[13px]">
         <thead>
-          <tr className="border-b border-white/8">
+          <tr className="border-b border-white/6 bg-white/2">
             {headers.map((h) => (
-              <th key={h} className="text-left py-2 pr-6 text-xs text-neutral-500 font-medium">
+              <th key={h} className="text-left px-4 py-2.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">
                 {h}
               </th>
             ))}
@@ -152,9 +129,9 @@ function Table({
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className="border-b border-white/4">
+            <tr key={i} className={i < rows.length - 1 ? "border-b border-white/4" : ""}>
               {row.map((cell, j) => (
-                <td key={j} className="py-2.5 pr-6 text-neutral-300 text-xs">
+                <td key={j} className="px-4 py-3 text-neutral-300">
                   {cell}
                 </td>
               ))}
@@ -166,65 +143,701 @@ function Table({
   );
 }
 
-function Divider() {
-  return <div className="border-t border-white/6 my-10" />;
+function Steps({ items }: { items: { title: string; body: React.ReactNode }[] }) {
+  return (
+    <div className="mb-5">
+      {items.map((item, i) => (
+        <div key={i} className="flex gap-4 mb-4">
+          <div className="shrink-0 mt-0.5 w-6 h-6 rounded-full border border-white/15 flex items-center justify-center text-[11px] font-bold text-neutral-400">
+            {i + 1}
+          </div>
+          <div>
+            <p className="text-[14px] font-medium text-white mb-0.5">{item.title}</p>
+            <div className="text-[14px] text-neutral-400 leading-relaxed">{item.body}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+function Mono({ children }: { children: React.ReactNode }) {
+  return <span className="font-mono text-[12px] text-neutral-400">{children}</span>;
+}
 
-export default function DocsPage() {
-  const [active, setActive] = useState("what-is-strk");
-  const contentRef = useRef<HTMLDivElement>(null);
+// ── Pages ─────────────────────────────────────────────────────────────────────
 
-  // Track which section is in view
-  useEffect(() => {
-    const allIds = SECTIONS.flatMap((s) => s.items.map((i) => i.id));
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActive(entry.target.id);
-            break;
-          }
-        }
-      },
-      { rootMargin: "-20% 0px -70% 0px" },
-    );
-    allIds.forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    });
-    return () => observer.disconnect();
-  }, []);
+function PageIntroduction() {
+  return (
+    <>
+      <H1>Introduction</H1>
+      <p className="text-neutral-500 text-sm mb-8">Decentralized insurance for DeFi, underwritten by BTC Liquid Staking Tokens on Starknet.</p>
 
-  function scrollTo(id: string) {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-  }
+      <Prose>
+        BitCover lets DeFi users buy on-chain coverage against smart contract exploits, and lets
+        BTC-LST holders earn USDC yield by underwriting those policies.
+      </Prose>
+      <Prose>
+        When you deposit into a lending protocol or liquidity pool, you carry real risk — bugs,
+        oracle attacks, and exploits have cost the ecosystem hundreds of millions of dollars.
+        BitCover is the safety net: pay a small USDC premium, receive a Coverage NFT, and get
+        compensated in BTC-LST if the protocol you&apos;re insured against is exploited.
+      </Prose>
+
+      <Hint type="info">
+        BitCover is live on <strong>Starknet Sepolia testnet</strong>. Full coverage, LP, and
+        claims flows are functional. Mainnet is planned for a future release.
+      </Hint>
+
+      <H2>Who is it for?</H2>
+      <DataTable
+        headers={["Who", "What BitCover gives them"]}
+        rows={[
+          ["DeFi users", "Coverage against exploits on the protocols they use"],
+          ["BTC-LST holders", "USDC yield on idle xyBTC by underwriting insurance pools"],
+          ["Protocol teams", "A trust signal — point users to BitCover as evidence of safety"],
+          ["Developers", "An open, composable insurance primitive"],
+        ]}
+      />
+
+      <H2>How it connects both sides</H2>
+      <CodeBlock>{`Coverage buyers  →  pay USDC premium  →  receive Coverage NFT
+                                           ↓
+Liquidity providers  →  deposit BTC-LST  →  earn those USDC premiums
+                                           ↓
+On approved claim  →  vault pays BTC-LST to claimant  →  NFT burned`}</CodeBlock>
+    </>
+  );
+}
+
+function PageConcepts() {
+  return (
+    <>
+      <H1>Core Concepts</H1>
+      <p className="text-neutral-500 text-sm mb-8">The five building blocks of the protocol.</p>
+
+      <H2>Coverage</H2>
+      <Prose>
+        A guarantee that if a specific DeFi protocol is exploited within your chosen time window,
+        you&apos;ll be compensated up to the amount you covered. Each policy covers a single,
+        named protocol — if you use three protocols, you need three separate policies.
+      </Prose>
+      <Prose>
+        You choose: <strong>which protocol</strong>, <strong>how much</strong> (in BTC-LST terms),
+        and <strong>for how long</strong> — 30, 60, 90, or 180 days.
+      </Prose>
+
+      <H2>Premiums</H2>
+      <Prose>
+        The USDC amount you pay upfront to activate coverage. Non-refundable once active.
+        Premiums scale linearly with duration relative to the 90-day base period and the
+        protocol&apos;s rate (set by governance in basis points).
+      </Prose>
+      <CodeBlock>{`premium = coverage_amount × BTC_price × rate × duration
+          ──────────────────────────────────────────────────
+          PRICE_PRECISION × RATE_DENOMINATOR × BASE_DURATION
+
+BASE_DURATION = 7,776,000s (90 days)   RATE_DENOMINATOR = 10,000`}</CodeBlock>
+
+      <H2>BTC-LST (xyBTC)</H2>
+      <Prose>
+        Tokenized staked Bitcoin — deposited by LPs as underwriting capital. BTC-LSTs are
+        yield-bearing, so LPs earn staking yield on top of USDC premiums while their capital
+        sits in the vault. Claims are paid out in BTC-LST, giving claimants a
+        Bitcoin-denominated asset.
+      </Prose>
+      <Prose>
+        On testnet, BitCover uses <strong>xyBTC</strong> from endurFi Finance on Starknet.
+      </Prose>
+
+      <H2>Liquidity Providers</H2>
+      <Prose>
+        LPs deposit BTC-LST into a protocol-specific vault and earn USDC premiums in return.
+        Their capital is split into two buckets:
+      </Prose>
+      <DataTable
+        headers={["Bucket", "Description"]}
+        rows={[
+          ["Locked", "Backing active policies — cannot be withdrawn until the policy expires or a claim is settled"],
+          ["Available", "Free to withdraw at any time"],
+        ]}
+      />
+      <Hint type="warning">
+        The core LP risk is a claim payout. If an approved claim fires, BTC-LST is drawn from
+        the vault proportionally. Higher-risk protocols carry higher premium rates to compensate.
+      </Hint>
+
+      <H2>The Coverage NFT</H2>
+      <Prose>
+        Every coverage purchase mints an ERC-721 NFT to your wallet. It encodes your policy
+        on-chain: protocol covered, amount, start and end time, premium paid.
+        <Ic>is_active(token_id)</Ic> returns <Ic>true</Ic> while inside the coverage window.
+        Only active NFTs can file claims. The NFT is burned on payout or expiry.
+      </Prose>
+      <Prose>
+        Because it&apos;s a standard NFT, coverage positions are transferable. Whoever holds the
+        NFT at claim time receives the payout.
+      </Prose>
+    </>
+  );
+}
+
+function PageBuyCoverage() {
+  return (
+    <>
+      <H1>Buy Coverage</H1>
+      <p className="text-neutral-500 text-sm mb-8">Protect a DeFi position in under two minutes.</p>
+
+      <Hint type="info">
+        You&apos;ll need testnet USDC. Use the{" "}
+        <Link href="/app/faucet" className="underline">Faucet</Link> to mint MockUSDC before
+        proceeding.
+      </Hint>
+
+      <Steps
+        items={[
+          {
+            title: "Connect your wallet",
+            body: "Click the wallet button (top-right) and connect Argent X or Braavos.",
+          },
+          {
+            title: "Select a protocol",
+            body: (
+              <>
+                Go to the <Link href="/app" className="underline">Dashboard</Link>. Each card is
+                a registered DeFi protocol. Click to open its detail page.
+              </>
+            ),
+          },
+          {
+            title: "Set amount and duration",
+            body: "Enter the BTC-LST value you want covered and choose a duration. The USDC premium updates in real-time from the contract — no surprises.",
+          },
+          {
+            title: "Approve & confirm",
+            body: (
+              <>
+                Click <strong>Buy Cover</strong>. Two wallet prompts: first the USDC approval,
+                then <Ic>buy_coverage</Ic>. Coverage is live the moment the tx confirms.
+              </>
+            ),
+          },
+        ]}
+      />
+
+      <H2>Coverage duration &amp; cost</H2>
+      <DataTable
+        headers={["Duration", "Multiplier", "Example (1 BTC-LST, 5% rate, BTC = $1,500)"]}
+        rows={[
+          ["30 days", "0.33×", "~$25 USDC"],
+          ["60 days", "0.67×", "~$50 USDC"],
+          ["90 days", "1× (base)", "$75 USDC"],
+          ["180 days", "2×", "$150 USDC"],
+        ]}
+      />
+
+      <H2>What is and isn&apos;t covered</H2>
+      <DataTable
+        headers={["Covered", "Not covered"]}
+        rows={[
+          ["Smart contract exploits", "Market losses (price drops)"],
+          ["Oracle manipulation attacks", "Impermanent loss"],
+          ["", "Rug pulls / admin fraud"],
+          ["", "Protocols not listed on BitCover"],
+        ]}
+      />
+
+      <Hint type="warning">
+        Coverage is tied to a specific protocol address. Always verify you&apos;re buying for
+        the exact protocol and version you&apos;re depositing into.
+      </Hint>
+    </>
+  );
+}
+
+function PageProvideLiquidity() {
+  return (
+    <>
+      <H1>Provide Liquidity</H1>
+      <p className="text-neutral-500 text-sm mb-8">Earn USDC premiums on your BTC-LST holdings.</p>
+
+      <Prose>
+        Depositing BTC-LST into a BitCover vault makes you an underwriter. You earn USDC
+        premiums from every policy sold on that vault, while your BTC-LST continues accruing
+        staking yield from the underlying protocol.
+      </Prose>
+
+      <Steps
+        items={[
+          {
+            title: "Go to the LP page",
+            body: (
+              <>
+                Navigate to <Link href="/app/lp" className="underline">LP</Link> and select a
+                vault.
+              </>
+            ),
+          },
+          {
+            title: "Deposit BTC-LST",
+            body: "Enter the amount and confirm. You receive vault shares proportional to your deposit.",
+          },
+          {
+            title: "Checkpoint each epoch",
+            body: (
+              <>
+                Once per epoch, click <strong>Checkpoint</strong>. This snapshots your share
+                balance on-chain. <strong>You must do this</strong> to be eligible for that
+                epoch&apos;s premiums — missing means forfeiting.
+              </>
+            ),
+          },
+          {
+            title: "Claim premiums",
+            body: "After governance advances the epoch, claim your pro-rata USDC from the LP page. Premiums are sent to your wallet immediately.",
+          },
+          {
+            title: "Withdraw anytime",
+            body: "Withdraw up to the vault's available liquidity (total assets − locked). If the vault is heavily utilised, wait for active policies to expire.",
+          },
+        ]}
+      />
+
+      <H2>How premiums are distributed</H2>
+      <CodeBlock>{`your_payout = epoch_premiums[N] × your_shares / total_shares
+
+Epoch timeline:
+  LPs checkpoint()  →  premiums accumulate  →  advance_epoch()
+  →  claim_premiums(N)`}</CodeBlock>
+
+      <Hint type="warning">
+        A portion of your deposit is locked at all times against active policies. You
+        can&apos;t withdraw locked capital until the underlying policy expires or a claim is
+        settled.
+      </Hint>
+    </>
+  );
+}
+
+function PageFileAClaim() {
+  return (
+    <>
+      <H1>File a Claim</H1>
+      <p className="text-neutral-500 text-sm mb-8">Submit a claim if a covered protocol is exploited while your policy is active.</p>
+
+      <Steps
+        items={[
+          {
+            title: "Navigate to Submit a Claim",
+            body: (
+              <>
+                Go to <Link href="/app/submit-claim" className="underline">Submit a Claim</Link>.
+                Your active Coverage NFTs are listed automatically.
+              </>
+            ),
+          },
+          {
+            title: "Select your NFT and submit",
+            body: (
+              <>
+                Pick the affected position and click <strong>Submit Claim</strong>. This creates
+                an on-chain record with status <Ic>PENDING</Ic>.
+              </>
+            ),
+          },
+          {
+            title: "Wait for governor review",
+            body: "Governors review pending claims in the Governance page, assessing off-chain evidence of the exploit.",
+          },
+          {
+            title: "Approval — receive payout",
+            body: "If approved, the vault sends BTC-LST to your wallet and your NFT is burned. Payout is automatic — no one can intercept it.",
+          },
+          {
+            title: "Rejection — resubmit",
+            body: "If rejected, your NFT is untouched. Resubmit as many times as needed while the policy is still active.",
+          },
+        ]}
+      />
+
+      <H2>Payout calculation</H2>
+      <Prose>
+        You receive BTC-LST equivalent in USD value to your covered amount, at the BTC price
+        at time of payout:
+      </Prose>
+      <CodeBlock>{`payout (BTC-LST) = coverage_amount_USD / BTC_price_at_payout
+
+Example: covered $1,500 worth, BTC at payout = $1,600
+  → payout = $1,500 / $1,600 = 0.9375 BTC-LST`}</CodeBlock>
+
+      <H2>Claim states</H2>
+      <DataTable
+        headers={["Status", "Meaning"]}
+        rows={[
+          ["Pending", "Submitted, awaiting governor review"],
+          ["Approved", "Exploit confirmed — payout sent, NFT burned"],
+          ["Rejected", "Does not meet coverage criteria — resubmit allowed"],
+        ]}
+      />
+
+      <Hint type="tip">
+        Gather evidence before submitting — transaction hashes, post-mortems, or announcements
+        from the affected protocol strengthen your claim during review.
+      </Hint>
+    </>
+  );
+}
+
+function PageArchitecture() {
+  return (
+    <>
+      <H1>Architecture</H1>
+      <p className="text-neutral-500 text-sm mb-8">How the contracts are structured and why.</p>
+
+      <H2>Per-protocol isolation</H2>
+      <Prose>
+        Each insurable protocol gets its own isolated contract stack — vault, premium module, and
+        claims manager — deployed atomically by the factory. Risk is fully siloed: a catastrophic
+        claim on Protocol A cannot affect Protocol B&apos;s LPs.
+      </Prose>
+      <CodeBlock>{`InsuranceVaultFactory.create_vault(protocol_id, asset)
+  ├── deploy → LstVault         (capital pool)
+  ├── deploy → PremiumModule    (coverage sales + premium distribution)
+  └── deploy → ClaimsManager   (claim lifecycle)`}</CodeBlock>
+
+      <H2>Contract overview</H2>
+      <DataTable
+        headers={["Contract", "Role"]}
+        rows={[
+          ["ProtocolRegistry", "Global directory of all insurable protocols — coverage caps, premium rates, active status"],
+          ["LstVault", "ERC-4626 capital pool per protocol — tracks locked vs available liquidity, executes payouts"],
+          ["PremiumModule", "Coverage purchase interface — accepts USDC, mints NFTs, locks vault capital, manages epochs"],
+          ["ClaimsManager", "Claim lifecycle — submission, governor approve/reject, triggers vault payouts"],
+          ["CoverageToken", "Singleton ERC-721 — issues policy NFTs for all protocols"],
+          ["InsuranceVaultFactory", "Deploys the full per-protocol stack in one transaction"],
+        ]}
+      />
+
+      <H2>Locked vs available liquidity</H2>
+      <CodeBlock>{`available_liquidity = total_assets − locked_liquidity
+
+buy_coverage()   → locked_liquidity ↑
+policy expires   → locked_liquidity ↓
+claim approved   → locked_liquidity ↓, BTC-LST leaves vault`}</CodeBlock>
+    </>
+  );
+}
+
+function PageCrossChain() {
+  return (
+    <>
+      <H1>Cross-Chain</H1>
+      <p className="text-neutral-500 text-sm mb-8">Buy coverage on Base — backed by vault capital on Starknet.</p>
+
+      <Prose>
+        The BitCover vaults live on Starknet, but many DeFi users operate on EVM chains like
+        Base. The cross-chain extension — built on <strong>LayerZero V2</strong> — lets Base
+        users buy coverage without ever managing a Starknet wallet.
+      </Prose>
+
+      <H2>Message flow</H2>
+      <CodeBlock>{`User on Base
+  │  buyCoverage(protocolId, amount, duration, starknetAddr)
+  ├── pays USDC on Base, mints NFT on Base
+  └── sends MSG_LOCK ──► LayerZero ──► Starknet
+                                         vault.lock_for_coverage(amount)
+
+On approved claim:
+  ├── sends MSG_PAYOUT ──► LayerZero ──► Starknet
+                                          vault.withdraw_for_payout(starknetAddr, amount)`}</CodeBlock>
+
+      <H2>Base vs Starknet — key differences</H2>
+      <DataTable
+        headers={["", "Starknet", "Base"]}
+        rows={[
+          ["Premium", "USDC on Starknet", "USDC on Base"],
+          ["Coverage NFT", "ERC-721 on Starknet", "ERC-721 on Base"],
+          ["Claim payout", "BTC-LST to Starknet wallet", "BTC-LST to a Starknet address you provide at purchase"],
+          ["Vault interaction", "Direct", "Via LayerZero V2"],
+        ]}
+      />
+
+      <Hint type="warning">
+        When buying from Base, provide a Starknet address at purchase time — this is where any
+        BTC-LST payout will be sent.
+      </Hint>
+
+      <H2>Message types</H2>
+      <DataTable
+        headers={["Type", "Byte", "Action"]}
+        rows={[
+          ["MSG_LOCK_COVERAGE", "0x01", "vault.lock_for_coverage(amount)"],
+          ["MSG_UNLOCK_COVERAGE", "0x02", "vault.unlock_from_coverage(amount)"],
+          ["MSG_PAYOUT_CLAIM", "0x03", "vault.withdraw_for_payout(user, amount)"],
+        ]}
+      />
+    </>
+  );
+}
+
+function PageSecurity() {
+  return (
+    <>
+      <H1>Security &amp; Trust</H1>
+      <p className="text-neutral-500 text-sm mb-8">What is trustless, and where governance is involved.</p>
+
+      <H2>Fully on-chain</H2>
+      <Prose>These actions require no trust in any individual or organisation:</Prose>
+      <DataTable
+        headers={["Action", "How"]}
+        rows={[
+          ["Buy coverage", "Premium, capital lock, and NFT mint happen atomically in one tx"],
+          ["LP deposits / withdrawals", "No intermediary, no custodian"],
+          ["Claim payout", "Once approved, executes on-chain automatically — cannot be redirected"],
+          ["Coverage expiry", "Anyone can call expire_coverage once a policy's end_time passes"],
+        ]}
+      />
+
+      <H2>Requires governance</H2>
+      <Prose>These actions rely on the governor multisig:</Prose>
+      <DataTable
+        headers={["Action", "Who"]}
+        rows={[
+          ["Claim adjudication", "Governors review off-chain evidence and call approve or reject"],
+          ["Protocol registration", "Governance lists protocols and sets coverage caps and rates"],
+          ["Protocol pausing", "Governance can pause coverage sales on a specific protocol"],
+        ]}
+      />
+      <Hint type="warning">
+        Claim adjudication is the most significant trust assumption. Governors cannot move funds
+        directly — only approve or reject submitted claims. But the approval itself is off-chain.
+      </Hint>
+
+      <H2>Vault roles</H2>
+      <DataTable
+        headers={["Role", "Permissions"]}
+        rows={[
+          ["Owner", "Pause vault, set deposit limits, assign roles"],
+          ["Pauser", "Pause / unpause vault"],
+          ["Coverage Manager", "lock_for_coverage, unlock_from_coverage — assigned to PremiumModule"],
+          ["Claims Manager", "withdraw_for_payout — assigned to ClaimsManager contract"],
+        ]}
+      />
+
+      <Hint type="info">
+        A formal security audit is planned before mainnet. Treat all testnet contracts as
+        experimental.
+      </Hint>
+    </>
+  );
+}
+
+function PageFAQ() {
+  const items: { q: string; a: React.ReactNode }[] = [
+    {
+      q: "Is my coverage guaranteed?",
+      a: "Payouts are backed by real BTC-LST locked in the vault. Coverage caps ensure the vault is never overextended. In an extreme scenario where multiple large claims fire simultaneously, payouts are processed in approval order.",
+    },
+    {
+      q: "Can I cancel coverage early?",
+      a: "No — premiums are non-refundable and coverage cannot be cancelled. Simply let it expire; locked vault capital is freed automatically.",
+    },
+    {
+      q: "Can I transfer my Coverage NFT?",
+      a: "Yes. It's a standard ERC-721. Whoever holds the NFT at claim submission time receives the payout if approved.",
+    },
+    {
+      q: "What happens if a claim is rejected?",
+      a: "Your NFT is untouched. You can resubmit as many times as you like while the policy is still active.",
+    },
+    {
+      q: "Must I call checkpoint() every epoch?",
+      a: "Yes. Missing a checkpoint for an epoch means forfeiting that epoch's premiums, even if you held vault shares throughout.",
+    },
+    {
+      q: "Do I need a Starknet wallet to use BitCover?",
+      a: "For purchases on Starknet, yes. For the Base cross-chain extension, only an EVM wallet is needed for purchase — but you'll still need to provide a Starknet address to receive any BTC-LST payout.",
+    },
+    {
+      q: "What is xyBTC?",
+      a: "xyBTC is a BTC Liquid Staking Token from endurFi Finance on Starknet. It represents staked Bitcoin and continues to accrue staking yield. It's the underwriting asset BitCover uses on testnet.",
+    },
+    {
+      q: "What happens to LP premiums if a claim is approved?",
+      a: "Already-distributed premiums are not clawed back. The claim payout comes from locked BTC-LST capital, not from previously distributed USDC.",
+    },
+  ];
 
   return (
-    <div className="flex gap-8 max-w-6xl mx-auto">
+    <>
+      <H1>FAQ</H1>
+      <p className="text-neutral-500 text-sm mb-8">Frequently asked questions.</p>
+
+      <div className="space-y-7">
+        {items.map((item, i) => (
+          <div key={i}>
+            <p className="text-[15px] font-semibold text-white mb-1.5">{item.q}</p>
+            <p className="text-[14px] text-neutral-400 leading-relaxed">{item.a}</p>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function PageDeveloper() {
+  return (
+    <>
+      <H1>Developer Reference</H1>
+      <p className="text-neutral-500 text-sm mb-8">Addresses, constants, and key functions.</p>
+
+      <H2>Starknet Sepolia</H2>
+      <DataTable
+        headers={["Contract", "Address"]}
+        rows={[
+          ["ProtocolRegistry", <Mono key="r">0x0493ff23ec196924e7facfba6b351b9e40c906c280f48dc1892b113b6442ad0a</Mono>],
+          ["CoverageToken", <Mono key="ct">0x0648a1f37af0adeea21180c08e1ddd5002561f50cee547ed9bf56588153c9319</Mono>],
+          ["InsuranceVaultFactory", <Mono key="f">0x0293d696a31a5755e5e625e83f797a8e9075037bd868f51d3eee8480a099fc02</Mono>],
+          ["MockUSDC", <Mono key="u">0x04621e68e8784928870a619f405e807cf061096f301eb8b7c1fee7dc35bef91a</Mono>],
+          ["BTC-LST (xyBTC)", <Mono key="b">0x02579f9dc11305ff5b300babde1ee79176a6d58c0f0a022c992ce3f8195b65ee</Mono>],
+        ]}
+      />
+
+      <H2>Base Sepolia</H2>
+      <DataTable
+        headers={["Contract", "Address"]}
+        rows={[
+          ["BaseInsuranceHub", <Mono key="hub">0x7F7e7B7C207a9d04aab64a577F8E131947F039A6</Mono>],
+          ["CoverageTokenBase", <Mono key="ctb">0xBdDBbEB6ed923639cc6fa9948A86BF3dC9B43766</Mono>],
+          ["InsuranceReceiver", <Mono key="ir">0x05c27127ef05482ec7c152aa51cceec19db933cc2c63ef5f212603ce821c21c8</Mono>],
+          ["USDC (Base Sepolia)", <Mono key="ub">0x036CbD53842c5426634e7929541eC2318f3dCF7e</Mono>],
+        ]}
+      />
+
+      <H2>LayerZero EIDs</H2>
+      <DataTable
+        headers={["Chain", "EID"]}
+        rows={[["Starknet Sepolia", "40500"], ["Base Sepolia", "40245"]]}
+      />
+
+      <H2>Duration constants</H2>
+      <DataTable
+        headers={["Label", "Seconds", "vs 90-day base"]}
+        rows={[
+          ["30 days", "2,592,000", "0.33×"],
+          ["60 days", "5,184,000", "0.67×"],
+          ["90 days", "7,776,000", "1× (base)"],
+          ["180 days", "15,552,000", "2×"],
+        ]}
+      />
+
+      <H2>Premium formula</H2>
+      <CodeBlock>{`premium = coverage_amount × BTC_PRICE_USDC × rate × duration
+          ─────────────────────────────────────────────────────────
+               PRICE_PRECISION × RATE_DENOMINATOR × BASE_DURATION
+
+BTC_PRICE_USDC  = 1,500e18    PRICE_PRECISION = 1e18
+RATE_DENOMINATOR = 10,000     BASE_DURATION   = 7,776,000s`}</CodeBlock>
+
+      <H2>Onboarding a new protocol</H2>
+      <CodeBlock>{`# 1. Register in registry
+sncast invoke --contract-address $REGISTRY --function register_protocol \\
+  --calldata $PROTOCOL_ADDR 0x0 $CAP_LOW $CAP_HIGH $PREMIUM_RATE
+
+# 2. Deploy vault stack via factory
+sncast invoke --contract-address $FACTORY --function create_vault \\
+  --calldata $PROTOCOL_ID 0 '"Vault Name"' '"SYMBOL"' $LSTBTC_ADDR
+
+# 3. Wire permissions (get PM + CM from factory events)
+sncast invoke --contract-address $VAULT     --function set_coverage_manager --calldata $PM
+sncast invoke --contract-address $VAULT     --function set_claims_manager   --calldata $CM
+sncast invoke --contract-address $COV_TOKEN --function set_minter           --calldata $PM
+sncast invoke --contract-address $COV_TOKEN --function set_burner           --calldata $CM
+sncast invoke --contract-address $PM        --function set_claims_manager   --calldata $CM`}</CodeBlock>
+
+      <H2>Key functions</H2>
+      <H3>PremiumModule</H3>
+      <DataTable
+        headers={["Function", "Description"]}
+        rows={[
+          [<Ic key="bc">buy_coverage(amount, duration)</Ic>, "Pay premium, mint NFT, lock vault capital"],
+          [<Ic key="pc">preview_cost(amount, duration)</Ic>, "View — returns USDC cost with no state change"],
+          [<Ic key="cp">checkpoint()</Ic>, "Record LP share balance for current epoch"],
+          [<Ic key="cl">claim_premiums(epoch)</Ic>, "Withdraw earned USDC for a finalised epoch"],
+          [<Ic key="ae">advance_epoch()</Ic>, "Governance — finalise epoch, open next"],
+          [<Ic key="ec">expire_coverage(token_id)</Ic>, "Anyone — unlock capital after policy expiry"],
+        ]}
+      />
+      <H3>ClaimsManager</H3>
+      <DataTable
+        headers={["Function", "Description"]}
+        rows={[
+          [<Ic key="sc">submit_claim(token_id)</Ic>, "NFT owner submits a claim"],
+          [<Ic key="ac">approve_claim(claim_id)</Ic>, "Governor — triggers payout, burns NFT"],
+          [<Ic key="rc">reject_claim(claim_id)</Ic>, "Governor — sets status to rejected"],
+        ]}
+      />
+    </>
+  );
+}
+
+const PAGES: Record<PageId, React.ReactNode> = {
+  introduction: <PageIntroduction />,
+  concepts: <PageConcepts />,
+  "buy-coverage": <PageBuyCoverage />,
+  "provide-liquidity": <PageProvideLiquidity />,
+  "file-a-claim": <PageFileAClaim />,
+  architecture: <PageArchitecture />,
+  "cross-chain": <PageCrossChain />,
+  security: <PageSecurity />,
+  faq: <PageFAQ />,
+  developer: <PageDeveloper />,
+};
+
+// ── Root ──────────────────────────────────────────────────────────────────────
+
+export default function DocsPage() {
+  const [page, setPage] = useState<PageId>("introduction");
+
+  const currentIndex = ALL_ITEMS.findIndex((i) => i.id === page);
+  const prev = currentIndex > 0 ? ALL_ITEMS[currentIndex - 1] : null;
+  const next = currentIndex < ALL_ITEMS.length - 1 ? ALL_ITEMS[currentIndex + 1] : null;
+
+  // Scroll content to top on page change
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [page]);
+
+  return (
+    <div className="flex gap-0 max-w-5xl mx-auto">
       {/* ── Sidebar ── */}
-      <aside className="hidden lg:block w-52 shrink-0">
-        <div className="sticky top-24 space-y-5">
-          {SECTIONS.map((section) => (
-            <div key={section.label}>
-              <p className="text-[10px] font-semibold text-neutral-600 uppercase tracking-widest mb-1.5 px-2">
-                {section.label}
+      <aside className="hidden lg:block w-56 shrink-0 pr-8">
+        <div className="sticky top-24 space-y-6">
+          {NAV.map((group) => (
+            <div key={group.group}>
+              <p className="text-[10px] font-semibold text-neutral-600 uppercase tracking-widest mb-1 px-2">
+                {group.group}
               </p>
-              <div className="space-y-0.5">
-                {section.items.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => scrollTo(item.id)}
-                    className={`w-full text-left px-2 py-1.5 text-xs rounded-md transition-colors ${
-                      active === item.id
-                        ? "text-white bg-white/8"
-                        : "text-neutral-500 hover:text-neutral-300 hover:bg-white/4"
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+              <div className="space-y-px">
+                {group.items.map((item) => {
+                  const active = page === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setPage(item.id as PageId)}
+                      className={`w-full text-left px-2 py-1.5 text-[13px] rounded transition-colors ${
+                        active
+                          ? "text-white font-medium"
+                          : "text-neutral-500 hover:text-neutral-300"
+                      }`}
+                    >
+                      {active && (
+                        <span className="inline-block w-1 h-1 rounded-full bg-[#E8704A] mr-2 mb-0.5" />
+                      )}
+                      {item.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -232,605 +845,37 @@ export default function DocsPage() {
       </aside>
 
       {/* ── Content ── */}
-      <main ref={contentRef} className="flex-1 min-w-0 pb-24">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Documentation</h1>
-          <p className="text-neutral-400 text-sm">
-            Everything you need to use and build on BitCover.
-          </p>
+      <main className="flex-1 min-w-0 max-w-2xl">
+        <div className="min-h-[60vh]">
+          {PAGES[page]}
         </div>
 
-        {/* ════════════════════════════════════════════════════════
-            GETTING STARTED
-        ════════════════════════════════════════════════════════ */}
-
-        <H2 id="what-is-strk">What is BitCover?</H2>
-        <P>
-          BitCover is a decentralized insurance protocol built on Starknet. It lets DeFi
-          users buy on-chain coverage for their positions in other protocols — for example,
-          coverage against a smart contract exploit in a lending protocol.
-        </P>
-        <P>
-          Coverage is backed by real capital: Liquidity Providers deposit BTC-LST (a Bitcoin
-          liquid staking token) into underwriting vaults. In return, LPs earn the USDC premiums
-          paid by coverage buyers. If a claim is approved, the claimant receives BTC-LST
-          directly from the vault.
-        </P>
-        <P>
-          The protocol also has a cross-chain extension: users on Base (EVM) can buy coverage
-          that triggers vault operations on Starknet via LayerZero V2.
-        </P>
-
-        <Divider />
-
-        <H2 id="how-it-works">How It Works</H2>
-
-        <Pre>{`  ┌─────────────────────────────────────────────────────────────┐
-  │                                                             │
-  │  LPs deposit BTC-LST ──► Vault ◄── locks capital           │
-  │                                                             │
-  │  Coverage buyers pay USDC ──► PremiumModule                 │
-  │       └── mints Coverage NFT                               │
-  │       └── locks vault capital proportional to coverage      │
-  │                                                             │
-  │  Each ~month, governance advances epoch:                    │
-  │       └── premiums distributed to LPs pro-rata             │
-  │                                                             │
-  │  If exploit occurs:                                         │
-  │       User submits claim ──► Governor approves              │
-  │       └── vault pays out BTC-LST to claimant               │
-  │       └── Coverage NFT burned                              │
-  │                                                             │
-  └─────────────────────────────────────────────────────────────┘`}</Pre>
-
-        <Divider />
-
-        <H2 id="key-concepts">Key Concepts</H2>
-
-        <H3>BTC-LST (xyBTC)</H3>
-        <P>
-          The collateral token deposited by LPs. It is a Bitcoin liquid staking token whose value
-          appreciates over time via staking yield. LPs receive vault shares when depositing, and
-          redeem those shares for BTC-LST when withdrawing.
-        </P>
-
-        <H3>Coverage NFT</H3>
-        <P>
-          An ERC-721 NFT minted on every coverage purchase. It encodes your policy — which
-          protocol is insured, how much coverage, for how long, and how much premium was paid.{" "}
-          <Code>is_active(token_id)</Code> returns <Code>true</Code> while within the coverage window.
-        </P>
-
-        <H3>Epochs</H3>
-        <P>
-          Premiums accumulate in the current epoch. Governance periodically calls{" "}
-          <Code>advance_epoch()</Code> to finalise, snapshot LP shares, and open the next epoch.
-          LPs must <Code>checkpoint()</Code> their share balance during an epoch to be eligible
-          for its premiums.
-        </P>
-
-        <H3>Coverage Cap</H3>
-        <P>
-          Each protocol has a maximum amount of active coverage. Purchases that would push total
-          coverage above the cap are rejected. The cap is set by governance and can be updated.
-        </P>
-
-        <Divider />
-
-        {/* ════════════════════════════════════════════════════════
-            USER GUIDES
-        ════════════════════════════════════════════════════════ */}
-
-        <H2 id="buy-coverage">Buying Coverage</H2>
-        <P>
-          Coverage protects your deposit in a whitelisted protocol against smart contract
-          exploits. You pay a USDC premium and receive a Coverage NFT representing your policy.
-        </P>
-
-        <Callout type="tip">
-          Use the <Link href="/app/faucet" className="underline">Faucet</Link> to get testnet
-          USDC and BTC-LST before trying any transactions.
-        </Callout>
-
-        <Step n={1} title="Connect your wallet">
-          Click the wallet button in the top-right corner and connect your Argent X or Braavos
-          wallet.
-        </Step>
-        <Step n={2} title="Pick a protocol">
-          Go to the <Link href="/app" className="underline">Dashboard</Link>. Each card
-          represents an insurable DeFi protocol. Click one to open the protocol detail page.
-        </Step>
-        <Step n={3} title="Enter coverage amount and duration">
-          In the &quot;Buy Cover&quot; panel, enter how much BTC-LST value you want covered and
-          select a duration (30 / 60 / 90 / 180 days). The USDC premium is calculated in
-          real-time from the contract.
-        </Step>
-        <Step n={4} title="Approve and buy">
-          Click <strong>Buy Cover</strong>. Your wallet will prompt you to sign a two-call
-          transaction: first an ERC-20 approval for USDC, then the{" "}
-          <Code>buy_coverage</Code> call. Once confirmed, your Coverage NFT appears in &quot;Your
-          Covers&quot; on the dashboard.
-        </Step>
-
-        <Callout type="warning">
-          The vault must have enough unlocked liquidity to back your coverage. If it does not, the
-          transaction will be blocked with a warning.
-        </Callout>
-
-        <Divider />
-
-        <H2 id="provide-liquidity">Providing Liquidity</H2>
-        <P>
-          LPs deposit BTC-LST into a protocol vault and earn USDC premiums from every coverage
-          policy sold. Your capital backs the insurance pool — if a claim is approved, the payout
-          comes from your vault.
-        </P>
-
-        <Callout type="info">
-          Your BTC-LST continues to appreciate via LST staking yield while sitting in the vault.
-          Premiums are an additional layer of income on top.
-        </Callout>
-
-        <Step n={1} title="Go to the LP page">
-          Navigate to <Link href="/app/lp" className="underline">LP</Link> and select a vault.
-        </Step>
-        <Step n={2} title="Deposit BTC-LST">
-          Enter the amount you want to deposit and click <strong>Deposit</strong>. You receive
-          vault shares in return — these represent your proportional ownership of the pool.
-        </Step>
-        <Step n={3} title="Checkpoint your shares each epoch">
-          Once per epoch, visit the vault page and click <strong>Checkpoint</strong>. This
-          records your current share balance on-chain. You <em>must</em> do this to be eligible
-          for that epoch&apos;s premium distribution. Missing an epoch means forfeiting its
-          premiums.
-        </Step>
-        <Step n={4} title="Claim premiums after epoch advance">
-          After governance advances the epoch, a <strong>Claim Premiums</strong> button appears
-          for each past epoch you checkpointed. Click it to receive your share of the USDC
-          premiums proportional to your vault share snapshot.
-        </Step>
-        <Step n={5} title="Withdraw anytime">
-          You can withdraw up to the vault&apos;s <em>available liquidity</em> (total assets
-          minus locked coverage). If a large amount of coverage is active, a portion of your
-          deposit may be temporarily locked until coverage expires or a claim is resolved.
-        </Step>
-
-        <Divider />
-
-        <H2 id="claim-premiums">Claiming LP Premiums</H2>
-        <P>
-          Premium distribution happens per epoch. After an epoch is finalised you can claim your
-          share.
-        </P>
-
-        <Pre>{`Your payout = epoch_total_premiums × your_share_snapshot / total_share_snapshot`}</Pre>
-
-        <P>
-          The share snapshot is taken at the moment governance calls <Code>advance_epoch()</Code>.
-          LPs who did not call <Code>checkpoint()</Code> during that epoch get zero, regardless
-          of their deposit size.
-        </P>
-
-        <Callout type="warning">
-          Each epoch&apos;s premiums can only be claimed once per LP address. Claiming is
-          irreversible.
-        </Callout>
-
-        <Divider />
-
-        <H2 id="submit-claim">Submitting a Claim</H2>
-        <P>
-          If the protocol you have coverage on suffers an exploit or loss event, you can submit a
-          claim referencing your Coverage NFT. Governors review the evidence off-chain and approve
-          or reject.
-        </P>
-
-        <Step n={1} title="Go to Submit a Claim">
-          Navigate to <Link href="/app/submit-claim" className="underline">Submit a Claim</Link> in
-          the nav. Your active Coverage NFTs are listed automatically.
-        </Step>
-        <Step n={2} title="Select your NFT and submit">
-          Pick the coverage position you want to claim against and click{" "}
-          <strong>Submit Claim</strong>. This creates an on-chain claim record with status{" "}
-          <Code>PENDING</Code>.
-        </Step>
-        <Step n={3} title="Wait for governance review">
-          Governors can see all pending claims in the{" "}
-          <Link href="/app/governance" className="underline">Governance</Link> page. They will
-          review evidence and either approve or reject.
-        </Step>
-        <Step n={4} title="Approval: receive BTC-LST payout">
-          If approved, the vault sends <Code>coverage_amount</Code> in BTC-LST directly to your
-          wallet and your Coverage NFT is burned.
-        </Step>
-        <Step n={5} title="Rejection: resubmit">
-          If rejected, your NFT is untouched and you may submit a new claim with additional
-          evidence.
-        </Step>
-
-        <Callout type="info">
-          Your coverage must still be within its active window to submit a claim. Expired NFTs
-          cannot be claimed.
-        </Callout>
-
-        <Divider />
-
-        <H2 id="faucet">Testnet Faucet</H2>
-        <P>
-          On Starknet Sepolia, both MockUSDC and BTC-LST are freely mintable — there is no access
-          control on the <Code>mint</Code> function. Visit the{" "}
-          <Link href="/app/faucet" className="underline">Faucet</Link> page to mint:
-        </P>
-        <Table
-          headers={["Token", "Amount per mint", "Use"]}
-          rows={[
-            ["MockUSDC", "10,000 USDC", "Pay coverage premiums"],
-            ["BTC-LST (xyBTC)", "10 BTC-LST", "Deposit into LP vaults"],
-          ]}
-        />
-        <P>You can mint both in a single transaction using the &quot;Mint Both&quot; button.</P>
-
-        <Divider />
-
-        {/* ════════════════════════════════════════════════════════
-            TECHNICAL ARCHITECTURE
-        ════════════════════════════════════════════════════════ */}
-
-        <H2 id="arch-overview">System Overview</H2>
-        <P>
-          Each insured protocol gets its own isolated contract stack — one vault, one premium
-          module, one claims manager — all deployed atomically by the factory. Two contracts are
-          singletons shared across all protocols: the registry and the coverage token.
-        </P>
-
-        <Pre>{`┌──────────────────────────────────────────────────────────────────┐
-│                          STARKNET                                 │
-│                                                                   │
-│  ┌────────────────┐  registers   ┌────────────────────────────┐  │
-│  │ProtocolRegistry│◄─────────────│    InsuranceVaultFactory   │  │
-│  │                │              │                            │  │
-│  │ protocol list  │              │ deploys Vault + PM + CM    │  │
-│  │ coverage caps  │              │ per protocol atomically     │  │
-│  │ premium rates  │              └────────────────────────────┘  │
-│  └────────────────┘                                              │
-│          │ is_active?                                            │
-│          ▼                                                        │
-│  ┌────────────────┐  lock/unlock  ┌────────────────────────────┐ │
-│  │ PremiumModule  │◄─────────────►│        LstVault            │ │
-│  │                │               │                            │ │
-│  │ buy_coverage   │  withdraw for │ ERC-4626 share vault       │ │
-│  │ epoch system   │  payout       │ locked_liquidity tracking  │ │
-│  │ LP premiums    │◄─────────────►│ role-based access control  │ │
-│  └────────────────┘               └────────────────────────────┘ │
-│          │ mint/burn                         ▲                   │
-│          ▼                                   │ withdraw          │
-│  ┌────────────────┐  approve_claim  ┌────────────────────────┐  │
-│  │ CoverageToken  │◄───────────────►│    ClaimsManager       │  │
-│  │                │                 │                        │  │
-│  │ ERC-721 NFT    │ notify_payout   │ submit / approve /     │  │
-│  │ CoveragePos    │◄────────────────│ reject claims          │  │
-│  │ is_active()    │                 │ governor roles         │  │
-│  └────────────────┘                 └────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────┘`}</Pre>
-
-        <Divider />
-
-        <H2 id="protocol-registry">ProtocolRegistry</H2>
-        <P>
-          The global registry tracking every insurable DeFi protocol. Governance registers
-          protocols with a coverage cap (max active coverage in BTC-LST) and a premium rate in
-          basis points. The registry is queried by <Code>PremiumModule</Code> on every purchase
-          to check if the protocol is active.
-        </P>
-        <Table
-          headers={["Function", "Access", "Description"]}
-          rows={[
-            ["register_protocol(address, vault, cap, rate)", "GOVERNANCE", "Onboard a new protocol"],
-            ["pause_protocol(id)", "GOVERNANCE", "Block new coverage purchases"],
-            ["activate_protocol(id)", "GOVERNANCE", "Re-enable coverage purchases"],
-            ["set_coverage_params(id, cap, rate)", "GOVERNANCE", "Update cap / rate"],
-            ["is_active(id)", "public view", "Returns true if protocol is active"],
-            ["get_protocol(id)", "public view", "Returns full ProtocolInfo struct"],
-          ]}
-        />
-
-        <Divider />
-
-        <H2 id="lst-vault">LstVault</H2>
-        <P>
-          An ERC-4626 vault where LPs deposit BTC-LST and receive vault shares. The vault tracks
-          locked liquidity separately from total assets — locked liquidity cannot be withdrawn
-          until the corresponding coverage expires or a claim is resolved.
-        </P>
-
-        <Pre>{`available_liquidity = total_assets - locked_liquidity`}</Pre>
-
-        <Table
-          headers={["Role", "Permissions"]}
-          rows={[
-            ["OWNER_ROLE", "pause, set deposit limit, assign managers"],
-            ["COVERAGE_MANAGER_ROLE", "lock_for_coverage, unlock_from_coverage"],
-            ["CLAIMS_MANAGER_ROLE", "withdraw_for_payout"],
-          ]}
-        />
-
-        <Callout type="info">
-          The vault is ERC-4626 compliant — standard deposit, withdraw, mint, and redeem
-          functions all work as expected. No protocol-specific fees are applied.
-        </Callout>
-
-        <Divider />
-
-        <H2 id="premium-module">PremiumModule</H2>
-        <P>
-          The core entry point for coverage buyers. Handles premium pricing, USDC collection,
-          NFT minting, and vault capital locking. Also manages the epoch-based LP premium
-          distribution system.
-        </P>
-
-        <H3>Premium Formula</H3>
-        <Pre>{`premium = coverage_amount × BTC_PRICE_USDC × rate × duration
-          ─────────────────────────────────────────────────────
-               PRICE_PRECISION × RATE_DENOMINATOR × BASE_DURATION
-
-Constants:
-  BTC_PRICE_USDC  = $1,500 (hardcoded notional, 18 decimals)
-  BASE_DURATION   = 90 days (7,776,000 seconds)
-  RATE_DENOMINATOR = 10,000 (basis points)
-
-Example: 1 BTC-LST, 5% rate (500 bps), 90 days
-  = 1e18 × 1500e18 × 500 × 7776000
-    ──────────────────────────────── = 75 USDC
-       1e18 × 10000 × 7776000`}</Pre>
-
-        <H3>Epoch lifecycle</H3>
-        <Pre>{`Epoch N opens
-  │
-  ├── LPs call checkpoint()      → snapshot share balance for epoch N
-  ├── Buyers call buy_coverage() → premiums accumulate in pending_premiums
-  │
-  │ Governance calls advance_epoch()
-  │   └── pending_premiums  → epoch_premiums[N]
-  │   └── total vault shares → epoch_total_shares[N]
-  │   └── epoch counter     → N + 1
-  │
-Epoch N+1 opens
-  │
-  └── LPs call claim_premiums(N)
-        └── payout = epoch_premiums[N] × lp_shares[N] / epoch_total_shares[N]`}</Pre>
-
-        <Table
-          headers={["Function", "Access", "Description"]}
-          rows={[
-            ["buy_coverage(amount, duration)", "public", "Pay premium, mint NFT, lock vault"],
-            ["preview_cost(amount, duration)", "view", "Returns USDC cost, no state change"],
-            ["checkpoint()", "public LP", "Record share balance for current epoch"],
-            ["claim_premiums(epoch)", "public LP", "Withdraw USDC from finalized epoch"],
-            ["advance_epoch()", "GOVERNANCE", "Finalize epoch, open next"],
-            ["expire_coverage(token_id)", "public", "Unlock vault capital for expired NFT"],
-          ]}
-        />
-
-        <Divider />
-
-        <H2 id="coverage-token">CoverageToken</H2>
-        <P>
-          An ERC-721 NFT representing a live insurance policy. Minted by{" "}
-          <Code>PremiumModule</Code> on purchase, burned by <Code>ClaimsManager</Code> on claim
-          approval.
-        </P>
-
-        <Pre>{`CoveragePosition {
-  protocol_id      → which protocol is insured
-  coverage_amount  → BTC-LST value covered (18 decimals)
-  start_time       → block timestamp at purchase
-  end_time         → start_time + duration_in_seconds
-  premium_paid     → USDC amount paid (18 decimals)
-}`}</Pre>
-
-        <P>
-          <Code>is_active(token_id)</Code> returns <Code>true</Code> while{" "}
-          <Code>block_timestamp &lt; end_time</Code>. Only active NFTs can be used to submit
-          claims. Once expired, <Code>expire_coverage</Code> can be called on the{" "}
-          <Code>PremiumModule</Code> to free the locked vault capital.
-        </P>
-
-        <Divider />
-
-        <H2 id="claims-manager">ClaimsManager</H2>
-        <P>
-          Manages the full insurance claim lifecycle from submission through resolution.
-        </P>
-
-        <Pre>{`User holds active Coverage NFT
-        │
-        │ submit_claim(token_id)
-        ▼
-  [PENDING] ─────────────────────────► Governor approves
-        │                                   │
-        │ Governor rejects                  ▼
-        ▼                            [APPROVED]
-  [REJECTED]                          │
-        │                             ├── vault.withdraw_for_payout(user, amount)
-        │ User resubmits              ├── coverage_token.burn_coverage(token_id)
-        ▼                             └── pm.notify_claim_payout(token_id)
-  [PENDING] → ...`}</Pre>
-
-        <Callout type="warning">
-          Only the NFT owner can submit a claim. The claim references a specific token ID — each
-          NFT can only have one pending claim at a time. After rejection, the same NFT can be
-          re-submitted.
-        </Callout>
-
-        <Divider />
-
-        <H2 id="vault-factory">InsuranceVaultFactory</H2>
-        <P>
-          Deploys the full per-protocol contract stack in a single transaction. Given a
-          protocol ID and underlying asset address, it uses Cairo&apos;s <Code>deploy_syscall</Code>{" "}
-          to instantiate all three contracts atomically and wire the vault into the registry.
-        </P>
-
-        <Pre>{`factory.create_vault(protocol_id, name, symbol, underlying_asset)
-    │
-    ├── deploy_syscall ──► LstVault
-    ├── deploy_syscall ──► PremiumModule   (wired to vault + registry + USDC)
-    ├── deploy_syscall ──► ClaimsManager  (wired to vault + PM + coverage token)
-    └── registry.set_vault(protocol_id, vault_address)`}</Pre>
-
-        <Callout type="warning">
-          After <Code>create_vault</Code>, the admin must manually wire four more permissions
-          before the protocol is live: <Code>vault.set_coverage_manager(pm)</Code>,{" "}
-          <Code>vault.set_claims_manager(cm)</Code>,{" "}
-          <Code>coverage_token.set_minter(pm)</Code>, and{" "}
-          <Code>coverage_token.set_burner(cm)</Code>.
-        </Callout>
-
-        <Divider />
-
-        {/* ════════════════════════════════════════════════════════
-            CROSS-CHAIN
-        ════════════════════════════════════════════════════════ */}
-
-        <H2 id="crosschain-overview">Cross-Chain Overview</H2>
-        <P>
-          STRK Insurance has a cross-chain extension built on{" "}
-          <strong>LayerZero V2</strong>. Users on Base (EVM) interact with the{" "}
-          <Code>BaseInsuranceHub</Code> — a send-only OApp — which encodes vault operations into
-          LZ messages and delivers them to the <Code>InsuranceReceiver</Code> on Starknet.
-        </P>
-
-        <Pre>{`     BASE (EVM)                              STARKNET
-┌──────────────────────┐              ┌────────────────────────┐
-│                      │              │                        │
-│  CoverageTokenBase   │              │  InsuranceReceiver     │
-│  (ERC-721 on Base)   │              │  (LayerZero OApp)      │
-│          │           │              │          │             │
-│  BaseInsuranceHub    │──LayerZero──►│          ▼             │
-│  (OApp sender)       │              │  vault.lock /          │
-│                      │              │  unlock /              │
-│  MSG_LOCK_COVERAGE   │              │  withdraw_for_payout   │
-│  MSG_UNLOCK_COVERAGE │              │                        │
-│  MSG_PAYOUT_CLAIM    │              └────────────────────────┘
-└──────────────────────┘`}</Pre>
-
-        <Divider />
-
-        <H2 id="crosschain-evm">EVM Side — BaseInsuranceHub</H2>
-        <P>
-          A Solidity OApp on Base Sepolia. Users buy coverage here — paying USDC on Base and
-          receiving an ERC-721 NFT on Base — while the actual vault capital locking happens on
-          Starknet.
-        </P>
-
-        <Table
-          headers={["Function", "Action"]}
-          rows={[
-            ["buyCoverage(protocolId, amount, duration, starknetAddr)", "Mints NFT on Base, sends MSG_LOCK to Starknet"],
-            ["expireCoverage(tokenId)", "Burns NFT on Base, sends MSG_UNLOCK to Starknet"],
-            ["submitClaim(tokenId)", "Creates claim record on Base"],
-            ["approveClaim(claimId) [governor]", "Sends MSG_PAYOUT to Starknet, vault pays user's Starknet address"],
-          ]}
-        />
-
-        <Divider />
-
-        <H2 id="crosschain-starknet">Starknet Receiver</H2>
-        <P>
-          A Cairo OApp that receives LZ messages from Base and dispatches the corresponding vault
-          call. It holds the <Code>COVERAGE_MANAGER_ROLE</Code> and{" "}
-          <Code>CLAIMS_MANAGER_ROLE</Code> on the target vault.
-        </P>
-
-        <Table
-          headers={["Message", "Starknet action"]}
-          rows={[
-            ["MSG_LOCK_COVERAGE (0x01)", "vault.lock_for_coverage(amount)"],
-            ["MSG_UNLOCK_COVERAGE (0x02)", "vault.unlock_from_coverage(amount)"],
-            ["MSG_PAYOUT_CLAIM (0x03)", "vault.withdraw_for_payout(user, amount)"],
-          ]}
-        />
-
-        <Divider />
-
-        <H2 id="message-encoding">Message Encoding</H2>
-        <P>
-          All cross-chain messages are packed byte arrays. Big-endian, 97 bytes total.
-        </P>
-
-        <Pre>{`LOCK / UNLOCK (97 bytes):
-  [msg_type: 1 byte][protocol_id: 32 bytes][amount: 32 bytes][token_id: 32 bytes]
-
-PAYOUT (97 bytes):
-  [msg_type: 1 byte][protocol_id: 32 bytes][user_starknet_addr: 32 bytes][amount: 32 bytes]
-
-Message type constants:
-  0x01 = LOCK_COVERAGE
-  0x02 = UNLOCK_COVERAGE
-  0x03 = PAYOUT_CLAIM`}</Pre>
-
-        <Divider />
-
-        {/* ════════════════════════════════════════════════════════
-            REFERENCE
-        ════════════════════════════════════════════════════════ */}
-
-        <H2 id="deployed-addresses">Deployed Addresses</H2>
-        <H3>Starknet Sepolia</H3>
-        <Table
-          headers={["Contract", "Address"]}
-          rows={[
-            ["ProtocolRegistry", <code key="r" className="text-xs font-mono text-neutral-400">0x0493ff23ec196924e7facfba6b351b9e40c906c280f48dc1892b113b6442ad0a</code>],
-            ["CoverageToken", <code key="ct" className="text-xs font-mono text-neutral-400">0x0648a1f37af0adeea21180c08e1ddd5002561f50cee547ed9bf56588153c9319</code>],
-            ["InsuranceVaultFactory", <code key="f" className="text-xs font-mono text-neutral-400">0x0293d696a31a5755e5e625e83f797a8e9075037bd868f51d3eee8480a099fc02</code>],
-            ["MockUSDC", <code key="u" className="text-xs font-mono text-neutral-400">0x04621e68e8784928870a619f405e807cf061096f301eb8b7c1fee7dc35bef91a</code>],
-            ["BTC-LST (xyBTC)", <code key="b" className="text-xs font-mono text-neutral-400">0x02579f9dc11305ff5b300babde1ee79176a6d58c0f0a022c992ce3f8195b65ee</code>],
-            ["LZ Endpoint", <code key="lz" className="text-xs font-mono text-neutral-400">0x0316d70a6e0445a58c486215fac8ead48d3db985acde27efca9130da4c675878</code>],
-          ]}
-        />
-
-        <H3>Base Sepolia (cross-chain layer)</H3>
-        <Table
-          headers={["Contract", "Address"]}
-          rows={[
-            ["BaseInsuranceHub", <code key="hub" className="text-xs font-mono text-neutral-400">0x7F7e7B7C207a9d04aab64a577F8E131947F039A6</code>],
-            ["CoverageTokenBase", <code key="ctb" className="text-xs font-mono text-neutral-400">0xBdDBbEB6ed923639cc6fa9948A86BF3dC9B43766</code>],
-            ["InsuranceReceiver (Starknet)", <code key="ir" className="text-xs font-mono text-neutral-400">0x05c27127ef05482ec7c152aa51cceec19db933cc2c63ef5f212603ce821c21c8</code>],
-            ["USDC (Base Sepolia)", <code key="ub" className="text-xs font-mono text-neutral-400">0x036CbD53842c5426634e7929541eC2318f3dCF7e</code>],
-          ]}
-        />
-
-        <H3>LayerZero Chain IDs</H3>
-        <Table
-          headers={["Chain", "EID"]}
-          rows={[
-            ["Starknet Sepolia", "40500"],
-            ["Base Sepolia", "40245"],
-          ]}
-        />
-
-        <Divider />
-
-        <H2 id="premium-formula">Premium Formula Reference</H2>
-        <Pre>{`premium = coverage_amount × BTC_PRICE_USDC × rate × duration
-          ─────────────────────────────────────────────────────────
-               PRICE_PRECISION × RATE_DENOMINATOR × BASE_DURATION
-
-Hardcoded constants (PremiumModule):
-  BTC_PRICE_USDC    = 1,500 USDC  (1_500_000_000_000_000_000_000, 18 dec)
-  PRICE_PRECISION   = 1e18
-  RATE_DENOMINATOR  = 10,000      (basis points)
-  BASE_DURATION     = 7,776,000 s (90 days)
-
-Rate examples (basis points):
-  250  →  2.5% per 90 days
-  500  →  5.0% per 90 days
-  1000 → 10.0% per 90 days
-
-Coverage / premium examples at 5% rate, 90 days:
-  1  BTC-LST →   $75 USDC
-  10 BTC-LST →  $750 USDC
-  100 BTC-LST → $7,500 USDC`}</Pre>
+        {/* Prev / Next */}
+        <div className="flex justify-between mt-12 pt-6 border-t border-white/6">
+          {prev ? (
+            <button
+              onClick={() => setPage(prev.id as PageId)}
+              className="flex flex-col items-start gap-0.5 text-left group"
+            >
+              <span className="text-[11px] text-neutral-600 uppercase tracking-wider">Previous</span>
+              <span className="text-[14px] text-neutral-400 group-hover:text-white transition-colors">
+                ← {prev.label}
+              </span>
+            </button>
+          ) : <div />}
+
+          {next ? (
+            <button
+              onClick={() => setPage(next.id as PageId)}
+              className="flex flex-col items-end gap-0.5 text-right group"
+            >
+              <span className="text-[11px] text-neutral-600 uppercase tracking-wider">Next</span>
+              <span className="text-[14px] text-neutral-400 group-hover:text-white transition-colors">
+                {next.label} →
+              </span>
+            </button>
+          ) : <div />}
+        </div>
       </main>
     </div>
   );
