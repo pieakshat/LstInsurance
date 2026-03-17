@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 // ── Nav tree ──────────────────────────────────────────────────────────────────
 
@@ -200,12 +201,22 @@ function PageIntroduction() {
         ]}
       />
 
-      <H2>How it connects both sides</H2>
+      {/* <H2>How it connects both sides</H2>
       <CodeBlock>{`Coverage buyers  →  pay USDC premium  →  receive Coverage NFT
                                            ↓
 Liquidity providers  →  deposit BTC-LST  →  earn those USDC premiums
                                            ↓
-On approved claim  →  vault pays BTC-LST to claimant  →  NFT burned`}</CodeBlock>
+On approved claim  →  vault pays BTC-LST to claimant  →  NFT burned`}</CodeBlock> */}
+
+      <div className="mt-6 rounded-xl overflow-hidden border border-white/6 bg-[#0d0f14]">
+        <Image
+          src="/diagram-overview.svg"
+          alt="BitCover protocol overview — DeFi user, BitCover protocol, and liquidity provider flows"
+          width={780}
+          height={528}
+          className="w-full h-auto"
+        />
+      </div>
     </>
   );
 }
@@ -505,6 +516,16 @@ function PageArchitecture() {
   ├── deploy → PremiumModule    (coverage sales + premium distribution)
   └── deploy → ClaimsManager   (claim lifecycle)`}</CodeBlock>
 
+      <div className="my-6 rounded-xl overflow-hidden border border-white/6 bg-[#0d0f14]">
+        <Image
+          src="/diagram-starknet.svg"
+          alt="BitCover Starknet protocol flow diagram"
+          width={780}
+          height={746}
+          className="w-full h-auto"
+        />
+      </div>
+
       <H2>Contract overview</H2>
       <DataTable
         headers={["Contract", "Role"]}
@@ -550,6 +571,16 @@ function PageCrossChain() {
 On approved claim:
   ├── sends MSG_PAYOUT ──► LayerZero ──► Starknet
                                           vault.withdraw_for_payout(starknetAddr, amount)`}</CodeBlock>
+
+      <div className="my-6 rounded-xl overflow-hidden border border-white/6 bg-[#0d0f14]">
+        <Image
+          src="/diagram-crosschain.svg"
+          alt="BitCover cross-chain flow diagram"
+          width={780}
+          height={900}
+          className="w-full h-auto"
+        />
+      </div>
 
       <H2>Base vs Starknet — key differences</H2>
       <DataTable
@@ -825,11 +856,10 @@ export default function DocsPage() {
                     <button
                       key={item.id}
                       onClick={() => setPage(item.id as PageId)}
-                      className={`w-full text-left px-2 py-1.5 text-[13px] rounded transition-colors ${
-                        active
+                      className={`w-full text-left px-2 py-1.5 text-[13px] rounded transition-colors ${active
                           ? "text-white font-medium"
                           : "text-neutral-500 hover:text-neutral-300"
-                      }`}
+                        }`}
                     >
                       {active && (
                         <span className="inline-block w-1 h-1 rounded-full bg-[#E8704A] mr-2 mb-0.5" />

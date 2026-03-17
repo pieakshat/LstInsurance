@@ -22,17 +22,17 @@ const STEPS = [
   {
     number: "01",
     title: "Choose a protocol",
-    body: "Browse supported DeFi protocols — Aave, Nostra, Endur and more. Each protocol has its own coverage pool with transparent risk parameters.",
+    body: "Browse registered DeFi protocols. Each has its own isolated vault with a transparent coverage cap and premium rate set by governance.",
   },
   {
     number: "02",
     title: "Buy coverage",
-    body: "Pay a small USDC premium and receive your coverage NFT instantly on Starknet.",
+    body: "Pick an amount and duration (30–180 days), pay a USDC premium, and receive a Coverage NFT to your wallet. Coverage is active immediately.",
   },
   {
     number: "03",
     title: "Get paid if it fails",
-    body: "If a protocol is exploited, submit your claim on-chain. Once approved, payouts are sent directly from the BTC-backed insurance vault to your wallet.",
+    body: "If the protocol is exploited, submit your claim on-chain. Once governors approve, BTC-LST is sent directly to your wallet and your NFT is burned — automatic, no intermediaries.",
   },
 ];
 

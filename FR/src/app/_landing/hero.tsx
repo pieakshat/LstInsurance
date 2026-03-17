@@ -35,8 +35,9 @@ export function Hero() {
 
             {/* Subtext */}
             <p className="text-lg text-neutral-400 leading-relaxed mb-10 max-w-md">
-              BitCover provides on-chain insurance for your DeFi positions, backed by BTC LST liquidity.
-              Buy coverage in seconds and settle claims entirely on-chain — no custodians, no paperwork.
+              Pay a small USDC premium, receive a Coverage NFT, and get compensated in BTC-LST
+              if the protocol you&apos;re insured against is exploited. Fully on-chain —
+              no custodians, no paperwork.
             </p>
 
             {/* CTAs */}
@@ -57,7 +58,7 @@ export function Hero() {
 
             {/* Social proof micro-line */}
             <p className="mt-8 text-xs text-neutral-600">
-              Powered by Starknet · Non-custodial
+              Starknet · Base cross-chain · Non-custodial
             </p>
           </div>
 

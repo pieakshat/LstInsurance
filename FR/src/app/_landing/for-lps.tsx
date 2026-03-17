@@ -21,10 +21,12 @@ export function ForLPs() {
         <div className="relative max-w-2xl mx-auto">
           <p className="text-xs text-[#E8704A] font-medium tracking-widest uppercase mb-4">For liquidity providers</p>
           <h2 className="text-3xl lg:text-4xl font-bold mb-4 leading-tight">
-            Earn yield by backing coverage.
+            Two yield streams on your BTC-LST.
           </h2>
           <p className="text-neutral-400 leading-relaxed mb-8">
-            Provide BTC-LST liquidity to insurance vaults and earn premium income from every policy sold. Your capital is the backbone of the protocol — and it earns for it.
+            Deposit xyBTC into a BitCover vault and earn USDC premiums from every policy sold —
+            on top of the staking yield already accruing on your BTC-LST. Each protocol has its
+            own isolated vault, so you choose exactly which risk you&apos;re underwriting.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
             <Link

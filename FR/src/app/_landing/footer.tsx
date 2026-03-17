@@ -13,8 +13,8 @@ const LINKS = [
     heading: "Protocol",
     items: [
       { label: "How it works",  href: "#how-it-works" },
+      { label: "Documentation", href: "/docs" },
       { label: "Governance",    href: "/app/governance" },
-      { label: "Admin",         href: "/app/admin" },
     ],
   },
 ];
